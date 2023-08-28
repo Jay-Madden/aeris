@@ -825,6 +825,17 @@ slack = ["slack-sdk"]
 telegram = ["requests"]
 
 [[package]]
+name = "types-pytz"
+version = "2023.3.0.1"
+description = "Typing stubs for pytz"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-pytz-2023.3.0.1.tar.gz", hash = "sha256:1a7b8d4aac70981cfa24478a41eadfcd96a087c986d6f150d77e3ceb3c2bdfab"},
+    {file = "types_pytz-2023.3.0.1-py3-none-any.whl", hash = "sha256:65152e872137926bb67a8fe6cc9cfd794365df86650c5d5fdc7b167b0f38892e"},
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.7.1"
 description = "Backported and Experimental Type Hints for Python 3.7+"
@@ -942,4 +953,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "bd78d242d27bcbb9efced67ef337b338f8b91982f758d60b326888f83283ea34"
+content-hash = "7fafdb8cfc04139a48eb7285e3e4d63f81eb4ecd3bd6583db960aabe97618530"

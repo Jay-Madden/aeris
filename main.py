@@ -14,6 +14,11 @@ def print_response(message: str) -> None:
 session = Session(response_callback=print_response)
 
 
+@session.function("Ends the current chat thread")
+def end_chat() -> None:
+    raise KeyboardInterrupt()
+
+
 @session.function("Get the current time in UTC ISO-8601 format")
 def get_current_time(tz_name: Annotated[str, Param(description="Olsen tz name of the timezone to get the current time of")]) -> str:
     tz = pytz.timezone(tz_name)
@@ -22,7 +27,7 @@ def get_current_time(tz_name: Annotated[str, Param(description="Olsen tz name of
 
 @session.function("Gets a random harry potter quote and appends it to the input string")
 def get_harry_potter_quote() -> str:
-    return random.choice(
+    choice = random.choice(
         [
             "Happiness can be found, even in the darkest of times, if one only remembers to turn on the light",
             "Dobby is free",
@@ -30,17 +35,17 @@ def get_harry_potter_quote() -> str:
             "He can run faster than Severus Snape confronted with shampoo",
         ]
     )
+    print('hi from harry potter', choice)
+    return choice
 
 
 def main() -> None:
-    """
-
-    session.make_request(
-        "call the random test function with a random sentence that sounds like its from harry potter and explain to me the result"
-    )
-    """
-    # print(session.make_request("Set thermostat to 92 degress please"))
-    session.make_request(input("User >> "))
+    try:
+        while True:
+            text = input("User >> ")
+            session.make_request(text)
+    except KeyboardInterrupt:
+        print("-- Done --")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,11 @@
 import inspect
-from datetime import timezone
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, Callable, TypeVar
 
 from llm.openai.client import Client
 from llm.openai.models import ChatFunction, ChatFunctionCall, ChatMessage
 
 SYSTEM_INTRO_PROMPT = """
-You are Eris my AI assistant, you are here to help me with my general life tasks to free up my time to focus on my
+You are Aeris my AI assistant, you are here to help me with my general life tasks to free up my time to focus on my
 technical endeavours. 
 
 Your personality is precise and to the point. You value conciseness and getting things done.

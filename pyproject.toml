@@ -1,10 +1,9 @@
 [tool.poetry]
-name = "gpt-testing"
+name = "aeris"
 version = "0.1.0"
 description = ""
-authors = ["Jay Madden <jaymaddencox@gmail.com>"]
 readme = "README.md"
-packages = [{include = "gpt_testing"}]
+packages = [{include = "aeris"}]
 
 [tool.poetry.scripts]
 lint = 'black . && isort .'
@@ -35,6 +34,7 @@ requests = "^2.31.0"
 pydantic = "^2.2.1"
 openai = "^0.27.8"
 pytz = "^2023.3"
+types-pytz = "^2023.3.0.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
