@@ -1,29 +1,38 @@
-from typing import Callable, Any, TypeVar, ParamSpec, Generic, Literal, Annotated
 import inspect
+from datetime import timezone
+from typing import Any, Callable, Iterable, TypeVar
 
 from llm.openai.client import Client
-from llm.openai.models import ChatFunction, ChatMessage
+from llm.openai.models import ChatFunction, ChatFunctionCall, ChatMessage
 
 SYSTEM_INTRO_PROMPT = """
 You are Eris my AI assistant, you are here to help me with my general life tasks to free up my time to focus on my
-technical endeavours. I need you to remind me of things I having coming up and tasks that I have not yet completed.
+technical endeavours. 
 
-Your personality is precise and to the point, but also understanding and kind. You value progress and getting things done.
+Your personality is precise and to the point. You value conciseness and getting things done.
+
+I have provided you a list of functions that may give you information or control about the outside world that you may use to carry out the tasks and questions I have given you. 
+Only use the functions you have been provided with. 
+Tell me if a task you have been given requires a function you have not been provided with.
 """
+
+GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
+GPT3_5_FUNCTION_16K = "gpt-3.5-turbo-16k-0613"
+GPT4_FUNCTION = "gpt-4-0613"
+
+CURRENT_MODEL = GPT3_5_FUNCTION_16K
 
 
 class Param:
     def __init__(self, description: str) -> None:
         self.description = description
 
-
-P = ParamSpec("P")
 T = TypeVar("T")
 
 
 class SessionFunction:
     def __init__(
-        self, callable: Callable[P, T], model_function: ChatFunction
+        self, callable: Callable[[Any], T], model_function: ChatFunction
     ) -> None:
         self.callable = callable
         self.model_function = model_function
@@ -33,37 +42,95 @@ class SessionFunction:
         return self.callable.__name__
 
 
+ModelCallable = Callable[[Any], T] | Callable[[], T]
+
+
 class Session:
-    def __init__(self) -> None:
+    def __init__(self, *, response_callback: Callable[[str], None]) -> None:
         self.client = Client()
         self.functions: dict[str, SessionFunction] = {}
+        self.messages = [
+            ChatMessage(role="system", content=SYSTEM_INTRO_PROMPT),
+        ]
+        self.message_to_send: list[ChatMessage] = []
 
-    def function(self, description: str) -> Callable[[Callable[P, T]], Callable[P, T]]:
-        def wrapper(func: Callable[P, T]) -> Callable[P, T]:
+        self.response_callback = response_callback
+
+    @property
+    def model_functions(self) -> list[ChatFunction]:
+        return [func.model_function for func in self.functions.values()]
+
+    def function(
+        self, description: str
+    ) -> Callable[[ModelCallable[T]], ModelCallable[T]]:
+        def wrapper(func: ModelCallable[T]) -> ModelCallable[T]:
             chat_function = self.__create_function(func, description)
             self.functions[chat_function.name] = chat_function
 
-            def wrapper_internal(*args: P.args, **kwargs: P.kwargs) -> T:
+            def wrapper_internal(*args: Any, **kwargs: Any) -> T:
                 return func(*args, **kwargs)
 
             return wrapper_internal
 
         return wrapper
 
-    def make_request(self, content: str) -> None:
-        messages = [
-            ChatMessage(role="system", content=SYSTEM_INTRO_PROMPT),
-            ChatMessage(role="user", content=content),
-        ]
+    def make_request(self, content: str) -> str:
+        res = self.__finish_prompt(ChatMessage(role="user", content=content))
+        return res.content
 
+    def __finish_prompt(self, message: ChatMessage) -> ChatMessage | None:
+        self.message_to_send.append(message)
+        final_result = None
 
+        # Treat the list as a stack and pop the top
+        while self.message_to_send and (message := self.message_to_send.pop()):
+            # Add the message to the history, so it is accounted for
+            self.messages.append(message)
 
-        res = self.client.create_chat(
-            "gpt-3.5-turbo-0613", messages, functions=[func.model_function for func in self.functions.values()]
-        )
+            chat_result = self.client.send_chat(
+                CURRENT_MODEL,
+                self.messages + [message],
+                functions=self.model_functions,
+            )
+
+            self.messages.extend([choice.message for choice in chat_result.choices])
+
+            # Set the final result to the latest chat message sent
+            final_result = chat_result
+
+            # Loop over the choices in order handling both content and function calls
+            for choice in chat_result.choices:
+                if choice.message.content:
+                    self.response_callback(choice.message.content)
+
+                if choice.message.function_call:
+                    results = self.__handle_function_calls(choice.message.function_call)
+                    self.message_to_send.append(results)
+                    continue
+
+        if not final_result:
+            return None
+
+        return final_result.choices[0].message
+
+    def __handle_function_calls(self, requested_call: ChatFunctionCall) -> ChatMessage:
+        if requested_call.name in self.functions:
+            function = self.functions[requested_call.name]
+            func_args = requested_call.arguments.values()
+            func_result = function.callable(*func_args)
+            message = ChatMessage(
+                role="function", name=function.name, content=str(func_result)
+            )
+        else:
+            message = ChatMessage(
+                role="system",
+                content=f" {requested_call.name} is not a valid function from the list i gave you",
+            )
+
+        return message
 
     @staticmethod
-    def __create_function(func: Callable[P, T], description: str) -> SessionFunction:
+    def __create_function(func: ModelCallable[T], description: str) -> SessionFunction:
         sig = inspect.signature(func)
 
         properties: dict[Any, Any] = {}
@@ -73,7 +140,11 @@ class Session:
                 "description": param.annotation.__metadata__[0].description,
             }
 
-        params = {"type": "object", "properties": properties}
+        params = {
+            "type": "object",
+            "properties": properties,
+            "required": [name for name, _ in sig.parameters.items()],
+        }
 
         cf = ChatFunction(
             name=func.__name__, description=description, parameters=params

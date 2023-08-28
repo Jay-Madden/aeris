@@ -1,15 +1,31 @@
 import datetime
-from typing import Literal, Any
+import json
+from typing import Any, Generic, Literal, ParamSpec
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer, field_validator
 
+ChatUserType = (
+    Literal["user"] | Literal["system"] | Literal["assistant"] | Literal["function"]
+)
 
-ChatUserType = Literal["user"] | Literal["system"] | Literal["assistant"]
+P = ParamSpec("P")
 
 
 class ChatFunctionCall(BaseModel):
     name: str
-    arguments: str
+    arguments: dict[str, Any]
+
+    # ---- OpenAI For some reason expects arguments to be in strigified object form, handle that here ----
+    @field_serializer("arguments")
+    def serialize_args(self, args: dict[str, Any]) -> str:
+        return json.dumps(args)
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def parse_args(cls, data: Any) -> Any:
+        return json.loads(data)
+
+    # --------
 
 
 class ChatFunction(BaseModel):

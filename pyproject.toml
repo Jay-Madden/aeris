@@ -6,6 +6,9 @@ authors = ["Jay Madden <jaymaddencox@gmail.com>"]
 readme = "README.md"
 packages = [{include = "gpt_testing"}]
 
+[tool.poetry.scripts]
+lint = 'black . && isort .'
+
 [tool.mypy]
 plugins = [
   "pydantic.mypy"
@@ -31,10 +34,12 @@ python = "^3.10"
 requests = "^2.31.0"
 pydantic = "^2.2.1"
 openai = "^0.27.8"
+pytz = "^2023.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
 mypy = "^1.5.1"
+isort = "^5.12.0"
 
 [build-system]
 requires = ["poetry-core"]

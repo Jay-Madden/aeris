@@ -1,87 +1,47 @@
 import datetime
-import json
-import os
+import random
 from typing import Annotated
-
-import openai
 
 from llm.session import Session, Param
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-CURRENT_MODEL = "gpt-3.5-turbo-0613"
+import pytz
 
 
-session = Session()
+def print_response(message: str) -> None:
+    print(message)
 
 
-# @session.function("Function to get the current time in UTC ISO-8601 format")
-def get_current_time() -> str:
-    return datetime.datetime.utcnow().isoformat()
+session = Session(response_callback=print_response)
 
 
-@session.function("Function to test random stuff out")
-def test_func(s: Annotated[str, Param(description="SomeCoolDesc")]) -> None:
-    print(s)
+@session.function("Get the current time in UTC ISO-8601 format")
+def get_current_time(tz_name: Annotated[str, Param(description="Olsen tz name of the timezone to get the current time of")]) -> str:
+    tz = pytz.timezone(tz_name)
+    return tz.fromutc(datetime.datetime.utcnow()).isoformat()
 
 
-def get_dogs_names() -> str:
-    return json.dumps(["hermione", "luna"])
-
-
-FUNCTION_MAP = {"get_current_time": get_current_time, "get_dogs_names": get_dogs_names}
-
-session.make_request(
-    "Call the random test function with a random sentence that sounds like its from harry potter"
-)
+@session.function("Gets a random harry potter quote and appends it to the input string")
+def get_harry_potter_quote() -> str:
+    return random.choice(
+        [
+            "Happiness can be found, even in the darkest of times, if one only remembers to turn on the light",
+            "Dobby is free",
+            "Training for the ballet, Potter?",
+            "He can run faster than Severus Snape confronted with shampoo",
+        ]
+    )
 
 
 def main() -> None:
-    messages = [
-  #      {"role": "system", "content": SYSTEM_INTRO_PROMPT},
-        {"role": "user", "content": "What are the names of my dogs and what "},
-    ]
-    functions = [
-        {
-            "name": "get_current_time",
-            "description": "Gets the current time in UTC ISO-8601 format",
-            "parameters": {"type": "object", "properties": {}},
-        },
-        {
-            "name": "get_dogs_names",
-            "description": "Gets the names of my dogs",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    ]
+    """
 
-    chat_completion = openai.ChatCompletion.create(
-        model=CURRENT_MODEL,
-        functions=functions,
-        messages=messages,
+    session.make_request(
+        "call the random test function with a random sentence that sounds like its from harry potter and explain to me the result"
     )
-    # print(json.dumps(chat_completion, indent=2))
-
-    response_message = chat_completion["choices"][0]["message"]
-
-    if response_message.get("function_call"):
-        func = FUNCTION_MAP[response_message["function_call"]["name"]]
-        func_res = func()
-        messages.append(
-            {
-                "role": "function",
-                "name": response_message["function_call"]["name"],
-                "content": func_res,
-            }
-        )
-
-        resp = openai.ChatCompletion.create(
-            model=CURRENT_MODEL,
-            functions=functions,
-            messages=messages,
-        )
-        print(json.dumps(resp["choices"][0]["message"]["content"], indent=2))
+    """
+    # print(session.make_request("Set thermostat to 92 degress please"))
+    session.make_request(input("User >> "))
 
 
 if __name__ == "__main__":
-    pass
-    # main()
+    main()

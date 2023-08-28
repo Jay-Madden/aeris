@@ -3,10 +3,10 @@ import os
 import requests
 
 from llm.openai.models import (
-    ChatMessage,
     ChatFunction,
-    CreateChatResponse,
+    ChatMessage,
     CreateChatRequest,
+    CreateChatResponse,
 )
 
 
@@ -14,7 +14,7 @@ class Client:
     def __init__(self) -> None:
         self.create_chat_url = "https://api.openai.com/v1/chat/completions"
 
-    def create_chat(
+    def send_chat(
         self, model: str, messages: list[ChatMessage], functions: list[ChatFunction]
     ) -> CreateChatResponse:
         chat_req = CreateChatRequest(
@@ -36,6 +36,5 @@ class Client:
             data=json,
         )
 
-        foo = resp.json()
-
-        return CreateChatResponse(**resp.json())
+        json_res = resp.json()
+        return CreateChatResponse(**json_res)
