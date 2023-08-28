@@ -1,5 +1,6 @@
 import inspect
 import os
+import traceback
 from typing import Any, Callable, TypeVar
 
 from llm.openai.client import Client
@@ -28,7 +29,7 @@ GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
 GPT3_5_FUNCTION_16K = "gpt-3.5-turbo-16k-0613"
 GPT4_FUNCTION = "gpt-4-0613"
 
-CURRENT_MODEL = GPT3_5_FUNCTION_16K
+CURRENT_MODEL = GPT3_5_FUNCTION
 
 
 class Param:
@@ -38,8 +39,7 @@ class Param:
 
 T = TypeVar("T")
 
-
-ModelCallable = Callable[[Any], T] | Callable[[], T]
+ModelCallable = Callable[[Any], T | str] | Callable[[], T | str]
 
 
 class SessionFunction:
@@ -76,18 +76,23 @@ class Session:
             chat_function = self.__create_function(func, description)
             self.functions[chat_function.name] = chat_function
 
-            def wrapper_internal(*args: Any, **kwargs: Any) -> T:
+            def wrapper_internal(*args: Any, **kwargs: Any) -> T | str:
                 return func(*args, **kwargs)
 
             return wrapper_internal
 
         return wrapper
 
-    def make_request(self, content: str) -> str:
+    def make_request(self, content: str) -> str | None:
         res = self.__finish_prompt(ChatMessage(role="user", content=content))
+
+        if not res:
+            return None
+
         return res.content
 
     def __finish_prompt(self, message: ChatMessage) -> ChatMessage | None:
+        # Add the latest message to the send stack
         self.message_to_send.append(message)
         final_result = None
 
@@ -126,7 +131,14 @@ class Session:
         if requested_call.name in self.functions:
             function = self.functions[requested_call.name]
             func_args = requested_call.arguments.values()
-            func_result = function.callable(*func_args)
+            try:
+                func_result = function.callable(*func_args)
+            except KeyboardInterrupt:
+                pass
+            except Exception as e:
+                func_result = "".join(
+                    traceback.format_exception(type(e), e, e.__traceback__)
+                )
             message = ChatMessage(
                 role="function", name=function.name, content=str(func_result)
             )

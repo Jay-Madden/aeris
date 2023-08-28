@@ -8,7 +8,7 @@ import pytz
 
 
 def print_response(message: str) -> None:
-    print(message)
+    print(f"Aeris >> {message}")
 
 
 session = Session(response_callback=print_response)
@@ -19,8 +19,22 @@ def end_chat() -> None:
     raise KeyboardInterrupt()
 
 
+@session.function("Reads a file on the computer at a given path")
+def read_file(
+    file_path: Annotated[
+        str, Param(description="The relative path to the file to read")
+    ]
+) -> str:
+    return open(file_path).read()
+
+
 @session.function("Get the current time in UTC ISO-8601 format")
-def get_current_time(tz_name: Annotated[str, Param(description="Olsen tz name of the timezone to get the current time of")]) -> str:
+def get_current_time(
+    tz_name: Annotated[
+        str,
+        Param(description="Olsen tz name of the timezone to get the current time of"),
+    ]
+) -> str:
     tz = pytz.timezone(tz_name)
     return tz.fromutc(datetime.datetime.utcnow()).isoformat()
 
@@ -35,7 +49,7 @@ def get_harry_potter_quote() -> str:
             "He can run faster than Severus Snape confronted with shampoo",
         ]
     )
-    print('hi from harry potter', choice)
+    print("hi from harry potter", choice)
     return choice
 
 
@@ -45,7 +59,7 @@ def main() -> None:
             text = input("User >> ")
             session.make_request(text)
     except KeyboardInterrupt:
-        print("-- Done --")
+        print("\n-- Done --")
 
 
 if __name__ == "__main__":
