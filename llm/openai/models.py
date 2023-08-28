@@ -15,7 +15,7 @@ class ChatFunctionCall(BaseModel):
     name: str
     arguments: dict[str, Any]
 
-    # ---- OpenAI For some reason expects arguments to be in strigified object form, handle that here ----
+    # ---- OpenAI For some reason expects arguments to be in stringified object form, handle that here ----
     @field_serializer("arguments")
     def serialize_args(self, args: dict[str, Any]) -> str:
         return json.dumps(args)

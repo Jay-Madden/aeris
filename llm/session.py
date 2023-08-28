@@ -1,12 +1,21 @@
 import inspect
+import os
 from typing import Any, Callable, TypeVar
 
 from llm.openai.client import Client
 from llm.openai.models import ChatFunction, ChatFunctionCall, ChatMessage
 
-SYSTEM_INTRO_PROMPT = """
+USER_NAME = os.getenv("USER_NAME") or "John Doe"
+LOCATION = os.getenv("LOCATION") or "New York"
+
+SYSTEM_INTRO_PROMPT = f"""
 You are Aeris my AI assistant, you are here to help me with my general life tasks to free up my time to focus on my
 technical endeavours. 
+
+About Me:
+My name is {USER_NAME}
+I live in {LOCATION}
+
 
 Your personality is precise and to the point. You value conciseness and getting things done.
 
@@ -26,12 +35,16 @@ class Param:
     def __init__(self, description: str) -> None:
         self.description = description
 
+
 T = TypeVar("T")
+
+
+ModelCallable = Callable[[Any], T] | Callable[[], T]
 
 
 class SessionFunction:
     def __init__(
-        self, callable: Callable[[Any], T], model_function: ChatFunction
+        self, callable: ModelCallable[T], model_function: ChatFunction
     ) -> None:
         self.callable = callable
         self.model_function = model_function
@@ -39,9 +52,6 @@ class SessionFunction:
     @property
     def name(self) -> str:
         return self.callable.__name__
-
-
-ModelCallable = Callable[[Any], T] | Callable[[], T]
 
 
 class Session:
