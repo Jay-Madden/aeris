@@ -64,9 +64,16 @@ class CreateChatChoices(BaseModel):
     finish_reason: str
 
 
+class CreateChatUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
 class CreateChatResponse(BaseModel):
     id: str
     object: str
     created: datetime.datetime
     model: str
     choices: list[CreateChatChoices]
+    usage: CreateChatUsage
