@@ -9,6 +9,7 @@ from llm.session import (
     GPT3_5_FUNCTION,
     GPT4_FUNCTION,
     SessionResponseContext,
+    GPT3_5_FUNCTION_16K,
 )
 
 import pytz
@@ -21,7 +22,7 @@ def print_response(message: SessionResponseContext) -> None:
     )
 
 
-session = Session(default_model=GPT4_FUNCTION, response_callback=print_response)
+session = Session(default_model=GPT3_5_FUNCTION_16K, response_callback=print_response)
 
 
 @session.function("Ends the current chat thread")
@@ -29,7 +30,9 @@ def end_chat() -> None:
     raise SessionEndError()
 
 
-@session.function("Writes a file on the computer at a given path")
+@session.function(
+    "Writes a file on the computer at a given path overwriting everything in the file"
+)
 def write_file(
     file_path: Annotated[
         str, Param(description="The relative path to the file to read")
@@ -66,7 +69,7 @@ def get_current_time(
 def main() -> None:
     try:
         while True:
-            text = input("User >> ")
+            text = input(f"{Fore.GREEN}User >> {Style.RESET_ALL}")
             session.make_request(text)
     except SessionEndError:
         pass

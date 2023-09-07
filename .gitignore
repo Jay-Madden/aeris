@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Folder that the AI can be told to write files too so they are ignored
+model_output/
+
 # Pycharm configs
 .idea/
 
