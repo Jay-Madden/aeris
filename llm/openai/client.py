@@ -11,8 +11,10 @@ from llm.openai.models import (
 
 
 class Client:
-    def __init__(self) -> None:
+    def __init__(self, token: str) -> None:
         self.create_chat_url = "https://api.openai.com/v1/chat/completions"
+
+        self.token = token
 
     def send_chat(
         self, model: str, messages: list[ChatMessage], functions: list[ChatFunction]
@@ -20,13 +22,9 @@ class Client:
         chat_req = CreateChatRequest(
             model=model, messages=messages, functions=functions
         )
-
-        if not (token := os.getenv("OPENAI_API_KEY")):
-            raise Exception("No token found")
-
         headers = {
             "content-type": "application/json",
-            "Authorization": "Bearer " + token,
+            "Authorization": "Bearer " + self.token,
         }
 
         json = chat_req.model_dump_json(exclude_unset=True)

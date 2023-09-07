@@ -1,6 +1,11 @@
 import datetime
+import os
 import random
 from typing import Annotated
+
+import domain.primitives.file as file
+import domain.primitives.time as time
+import domain.primitives.control as control
 
 from llm.session import (
     Session,
@@ -10,6 +15,7 @@ from llm.session import (
     GPT4_FUNCTION,
     SessionResponseContext,
     GPT3_5_FUNCTION_16K,
+    SessionGroup,
 )
 
 import pytz
@@ -22,48 +28,17 @@ def print_response(message: SessionResponseContext) -> None:
     )
 
 
-session = Session(default_model=GPT3_5_FUNCTION_16K, response_callback=print_response)
+if not (token := os.getenv("OPENAI_API_KEY")):
+    raise Exception("'OPENAI_API_KEY not found")
 
-
-@session.function("Ends the current chat thread")
-def end_chat() -> None:
-    raise SessionEndError()
-
-
-@session.function(
-    "Writes a file on the computer at a given path overwriting everything in the file"
+session = Session(
+    token=token, default_model=GPT3_5_FUNCTION_16K, response_callback=print_response
 )
-def write_file(
-    file_path: Annotated[
-        str, Param(description="The relative path to the file to read")
-    ],
-    content: Annotated[
-        str, Param(description="The content to write to the given file")
-    ],
-) -> None:
-    with open(file_path, "w+") as f:
-        f.write(content)
 
 
-@session.function("Reads a file on the computer at a given path")
-def read_file(
-    file_path: Annotated[
-        str, Param(description="The relative path to the file to read")
-    ]
-) -> str:
-    with open(file_path) as f:
-        return f.read()
-
-
-@session.function("Get the current time in UTC ISO-8601 format")
-def get_current_time(
-    tz_name: Annotated[
-        str,
-        Param(description="Olsen tz name of the timezone to get the current time of"),
-    ]
-) -> str:
-    tz = pytz.timezone(tz_name)
-    return tz.fromutc(datetime.datetime.utcnow()).isoformat()
+session.add_group(time.group)
+session.add_group(file.group)
+session.add_group(control.group)
 
 
 def main() -> None:

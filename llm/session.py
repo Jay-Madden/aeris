@@ -65,14 +65,39 @@ class SessionFunction:
         return self.callable.__name__
 
 
+class SessionGroupFunction:
+    def __init__(self, func: ModelCallable[Any], description: str):
+        self.function: ModelCallable[Any] = func
+        self.description = description
+
+
+class SessionGroup:
+    def __init__(self) -> None:
+        self.functions: list[SessionGroupFunction] = []
+
+    def function(
+        self, description: str
+    ) -> Callable[[ModelCallable[T]], ModelCallable[T]]:
+        def wrapper(func: ModelCallable[T]) -> ModelCallable[T]:
+            self.functions.append(SessionGroupFunction(func, description))
+
+            def wrapper_internal(*args: Any, **kwargs: Any) -> T | str:
+                return func(*args, **kwargs)
+
+            return wrapper_internal
+
+        return wrapper
+
+
 class Session:
     def __init__(
         self,
         *,
+        token: str,
         default_model: str,
         response_callback: Callable[[SessionResponseContext], None],
     ) -> None:
-        self.client = Client()
+        self.client = Client(token=token)
         self.functions: dict[str, SessionFunction] = {}
         self.messages = [
             ChatMessage(role="system", content=SYSTEM_INTRO_PROMPT),
@@ -86,6 +111,13 @@ class Session:
     @property
     def model_functions(self) -> list[ChatFunction]:
         return [func.model_function for func in self.functions.values()]
+
+    def add_group(self, group: SessionGroup) -> None:
+        for model_func in group.functions:
+            chat_function = self.__create_function(
+                model_func.function, model_func.description
+            )
+            self.functions[chat_function.name] = chat_function
 
     def function(
         self, description: str
