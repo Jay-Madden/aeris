@@ -1,7 +1,10 @@
 import inspect
+import json
 import os
 import traceback
 from typing import Any, Callable, TypeVar
+
+from colorama import Style
 
 from llm.openai.client import Client
 from llm.openai.models import ChatFunction, ChatFunctionCall, ChatMessage
@@ -18,7 +21,7 @@ My name is {USER_NAME}
 I live in {LOCATION}
 
 
-Your personality is precise and to the point. You value conciseness and getting things done.
+Your personality is precise and to the point. You value conciseness and getting things done. 
 
 I have provided you a list of functions that may give you information or control about the outside world that you may use to carry out the tasks and questions I have given you. 
 Only use the functions you have been provided with. 
@@ -29,8 +32,6 @@ GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
 GPT3_5_FUNCTION_16K = "gpt-3.5-turbo-16k-0613"
 GPT4_FUNCTION = "gpt-4-0613"
 
-CURRENT_MODEL = GPT3_5_FUNCTION
-
 
 class Param:
     def __init__(self, description: str) -> None:
@@ -39,7 +40,17 @@ class Param:
 
 T = TypeVar("T")
 
-ModelCallable = Callable[[Any], T | str] | Callable[[], T | str]
+ModelCallable = Callable[..., T | str]
+
+
+class SessionEndError(Exception):
+    pass
+
+
+class SessionResponseContext:
+    def __init__(self, content: str, model: str):
+        self.content = content
+        self.model = model
 
 
 class SessionFunction:
@@ -55,7 +66,12 @@ class SessionFunction:
 
 
 class Session:
-    def __init__(self, *, response_callback: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        *,
+        default_model: str,
+        response_callback: Callable[[SessionResponseContext], None],
+    ) -> None:
         self.client = Client()
         self.functions: dict[str, SessionFunction] = {}
         self.messages = [
@@ -64,6 +80,8 @@ class Session:
         self.message_to_send: list[ChatMessage] = []
 
         self.response_callback = response_callback
+
+        self.current_model = default_model
 
     @property
     def model_functions(self) -> list[ChatFunction]:
@@ -102,7 +120,7 @@ class Session:
             self.messages.append(message)
 
             chat_result = self.client.send_chat(
-                CURRENT_MODEL,
+                self.current_model,
                 self.messages + [message],
                 functions=self.model_functions,
             )
@@ -115,7 +133,11 @@ class Session:
             # Loop over the choices in order handling both content and function calls
             for choice in chat_result.choices:
                 if choice.message.content:
-                    self.response_callback(choice.message.content)
+                    self.response_callback(
+                        SessionResponseContext(
+                            content=choice.message.content, model=self.current_model
+                        )
+                    )
 
                 if choice.message.function_call:
                     results = self.__handle_function_calls(choice.message.function_call)
@@ -131,24 +153,43 @@ class Session:
         if requested_call.name in self.functions:
             function = self.functions[requested_call.name]
             func_args = requested_call.arguments.values()
+
+            self._output_function_call_debug(
+                function.name, [args for args in func_args]
+            )
+
             try:
                 func_result = function.callable(*func_args)
-            except KeyboardInterrupt:
-                pass
+            except SessionEndError:
+                # Reraise the SessionEndInterrupt to end the session if the AI requests it
+                raise
             except Exception as e:
                 func_result = "".join(
                     traceback.format_exception(type(e), e, e.__traceback__)
                 )
+
+            self._output_function_result_debug(function.name, func_result)
+
             message = ChatMessage(
                 role="function", name=function.name, content=str(func_result)
             )
         else:
             message = ChatMessage(
                 role="system",
-                content=f" {requested_call.name} is not a valid function from the list i gave you",
+                content=f"{requested_call.name} is not a valid function from the list I gave you",
             )
 
         return message
+
+    def _output_function_call_debug(self, name: str, function_args: Any) -> None:
+        print(
+            f"{Style.DIM}calling function: '{name}' with args {json.dumps(function_args)}{Style.RESET_ALL}"
+        )
+
+    def _output_function_result_debug(self, name: str, result: Any) -> None:
+        print(
+            f"{Style.DIM}function: '{name}' returned {json.dumps(result)}{Style.RESET_ALL}"
+        )
 
     @staticmethod
     def __create_function(func: ModelCallable[T], description: str) -> SessionFunction:
