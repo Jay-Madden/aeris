@@ -134,6 +134,13 @@ class Session:
         return wrapper
 
     def make_request(self, content: str) -> str | None:
+        """
+        Makes a request to a given model and returns the models string response. This method will handle all intermediary
+        function calls the model uses to complete the request
+        :param content: the request to send to the model
+        :return: the models string response
+        """
+
         res = self.__finish_prompt(ChatMessage(role="user", content=content))
 
         if not res:
@@ -157,6 +164,7 @@ class Session:
                 functions=self.model_functions,
             )
 
+            # Extend the message stack with all the messages the model returned for you to handle
             self.messages.extend([choice.message for choice in chat_result.choices])
 
             # Set the final result to the latest chat message sent
