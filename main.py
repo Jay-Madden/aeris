@@ -3,9 +3,17 @@ import os
 import random
 from typing import Annotated
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 import domain.primitives.file as file
 import domain.primitives.time as time
 import domain.primitives.control as control
+import domain.core.memory as memory
 
 from llm.session import (
     Session,
@@ -39,6 +47,7 @@ session = Session(
 session.add_group(time.group)
 session.add_group(file.group)
 session.add_group(control.group)
+session.add_group(memory.group)
 
 
 def main() -> None:

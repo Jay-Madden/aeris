@@ -4,7 +4,6 @@ version = "0.1.0"
 description = ""
 readme = "README.md"
 authors = ["Jay"]
-packages = [{include = "aeris"}]
 
 [tool.poetry.scripts]
 lint = 'black . && isort .'
@@ -37,6 +36,8 @@ pytz = "^2023.3"
 types-pytz = "^2023.3.0.1"
 colorama = "^0.4.6"
 icalendar = "^5.0.7"
+types-colorama = "^0.4.15.12"
+python-dotenv = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"

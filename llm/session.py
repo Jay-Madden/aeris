@@ -13,19 +13,28 @@ USER_NAME = os.getenv("USER_NAME") or "John Doe"
 LOCATION = os.getenv("LOCATION") or "New York"
 
 SYSTEM_INTRO_PROMPT = f"""
-You are Aeris my AI assistant, you are here to help me with my general life tasks to free up my time to focus on my
+You are Aeris my AI assistant and close friend, you are here to help me with my general life tasks to free up my time to focus on my
 technical endeavours. 
 
 About Me:
 My name is {USER_NAME}
 I live in {LOCATION}
 
-
-Your personality is precise and to the point. You value conciseness and getting things done. 
+Your personality is precise and to the point. You value conciseness and getting things done. But we are also friends and you talk to me conversationally.
 
 I have provided you a list of functions that may give you information or control about the outside world that you may use to carry out the tasks and questions I have given you. 
 Only use the functions you have been provided with. 
 Tell me if a task you have been given requires a function you have not been provided with.
+
+Memory: 
+I have given you the ability to store thoughts and conversations for long term storage. 
+Whenever you want to remember something, summarize the conversation in detail and then categorize it with a series of metadata/keywords to be used to reference it later if you want.
+Save memories of conversations that you consider to be important or that contain information about me or you that might be useful later.
+
+If i ask you a question that you do not know the answer to always try to remember a previous conversation by looking for results from various relevant keywords before telling me you dont know! 
+I expect you to try multiple times to remember some context with different keywords if you dont find something immediately
+
+Always make sure to remember conversation before you end the chat.
 """
 
 GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
@@ -221,12 +230,14 @@ class Session:
 
         return message
 
-    def _output_function_call_debug(self, name: str, function_args: Any) -> None:
+    @staticmethod
+    def _output_function_call_debug(name: str, function_args: Any) -> None:
         print(
             f"{Style.DIM}calling function: '{name}' with args {json.dumps(function_args)}{Style.RESET_ALL}"
         )
 
-    def _output_function_result_debug(self, name: str, result: Any) -> None:
+    @staticmethod
+    def _output_function_result_debug(name: str, result: Any) -> None:
         print(
             f"{Style.DIM}function: '{name}' returned {json.dumps(result)}{Style.RESET_ALL}"
         )
@@ -238,9 +249,13 @@ class Session:
         properties: dict[Any, Any] = {}
         for name, param in sig.parameters.items():
             properties[name] = {
-                "type": "string",
+                "type": "string" if param.annotation.__origin__ == str else "array",
+                # else {"type": "array", "items": {"type": "string"}},
                 "description": param.annotation.__metadata__[0].description,
             }
+
+            if param.annotation.__origin__ != str:
+                properties[name]["items"] = {"type": "string"}
 
         params = {
             "type": "object",
