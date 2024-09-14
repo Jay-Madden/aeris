@@ -3,6 +3,7 @@ import os
 import random
 from typing import Annotated
 
+from domain.home import room
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,6 +22,7 @@ from llm.session import (
     SessionEndError,
     GPT3_5_FUNCTION,
     GPT4_FUNCTION,
+    GPT4O_MINI,
     SessionResponseContext,
     GPT3_5_FUNCTION_16K,
     SessionGroup,
@@ -40,7 +42,7 @@ if not (token := os.getenv("OPENAI_API_KEY")):
     raise Exception("'OPENAI_API_KEY not found")
 
 session = Session(
-    token=token, default_model=GPT3_5_FUNCTION_16K, response_callback=print_response
+    token=token, default_model=GPT4O_MINI, response_callback=print_response
 )
 
 
@@ -48,6 +50,7 @@ session.add_group(time.group)
 session.add_group(file.group)
 session.add_group(control.group)
 session.add_group(memory.group)
+session.add_group(room.group)
 
 
 def main() -> None:

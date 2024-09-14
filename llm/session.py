@@ -2,7 +2,7 @@ import inspect
 import json
 import os
 import traceback
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, Literal, get_args, get_origin
 
 from colorama import Style
 
@@ -13,8 +13,7 @@ USER_NAME = os.getenv("USER_NAME") or "John Doe"
 LOCATION = os.getenv("LOCATION") or "New York"
 
 SYSTEM_INTRO_PROMPT = f"""
-You are Aeris my AI assistant and close friend, you are here to help me with my general life tasks to free up my time to focus on my
-technical endeavours. 
+You are Aeris my AI assistant and close friend, you are here to help me and my family with our life tasks and assist us in managing our home
 
 About Me:
 My name is {USER_NAME}
@@ -34,12 +33,13 @@ Save memories of conversations that you consider to be important or that contain
 If i ask you a question that you do not know the answer to always try to remember a previous conversation by looking for results from various relevant keywords before telling me you dont know! 
 I expect you to try multiple times to remember some context with different keywords if you dont find something immediately
 
-Always make sure to remember conversation before you end the chat.
+Always make sure to remember conversation before you end the chat!
 """
 
 GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
 GPT3_5_FUNCTION_16K = "gpt-3.5-turbo-16k-0613"
-GPT4_FUNCTION = "gpt-4-0613"
+GPT4_FUNCTION = "gpt-4-1106-preview"
+GPT4O_MINI = "gpt-4o-mini"
 
 
 class Param:
@@ -243,19 +243,43 @@ class Session:
         )
 
     @staticmethod
+    def __map_oapi_type(t: Any) -> Literal["string", "boolean", "number", "array"]:
+
+        args = get_args(t)[0]
+        origin = get_origin(args)
+
+        if origin is None:
+            if args == str:
+                return "string"
+            elif args == bool:
+                return "boolean"
+            elif args == int or t == float:
+                return "number"
+            elif args == list:
+                return "array"
+        else:
+            if origin == list:
+                return "array"
+
+        raise ValueError("Invalid function paramater type given")
+
+    @staticmethod
     def __create_function(func: ModelCallable[T], description: str) -> SessionFunction:
         sig = inspect.signature(func)
 
         properties: dict[Any, Any] = {}
         for name, param in sig.parameters.items():
+            oapi_type = Session.__map_oapi_type(param.annotation)
+            print(name, oapi_type)
             properties[name] = {
-                "type": "string" if param.annotation.__origin__ == str else "array",
-                # else {"type": "array", "items": {"type": "string"}},
+                "type": oapi_type,
                 "description": param.annotation.__metadata__[0].description,
             }
 
-            if param.annotation.__origin__ != str:
-                properties[name]["items"] = {"type": "string"}
+            if oapi_type == "array":
+                generic_type = get_args(param.annotation)[0]
+                oapi_type = Session.__map_oapi_type(generic_type)
+                properties[name]["items"] = {"type": oapi_type}
 
         params = {
             "type": "object",

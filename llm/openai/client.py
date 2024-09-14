@@ -1,4 +1,5 @@
 import os
+import json
 
 import requests
 
@@ -33,6 +34,8 @@ class Client:
             headers=headers,
             data=json,
         )
+
+        resp.raise_for_status()
 
         json_res = resp.json()
         return CreateChatResponse(**json_res)

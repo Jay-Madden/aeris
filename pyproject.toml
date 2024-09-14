@@ -38,6 +38,7 @@ colorama = "^0.4.6"
 icalendar = "^5.0.7"
 types-colorama = "^0.4.15.12"
 python-dotenv = "^1.0.0"
+pydantic-settings = "^2.5.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
