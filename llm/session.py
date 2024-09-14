@@ -23,7 +23,6 @@ Your personality is precise and to the point. You value conciseness and getting 
 
 I have provided you a list of functions that may give you information or control about the outside world that you may use to carry out the tasks and questions I have given you. 
 Only use the functions you have been provided with. 
-Tell me if a task you have been given requires a function you have not been provided with.
 
 Memory: 
 I have given you the ability to store thoughts and conversations for long term storage. 
@@ -31,7 +30,7 @@ Whenever you want to remember something, summarize the conversation in detail an
 Save memories of conversations that you consider to be important or that contain information about me or you that might be useful later.
 
 If i ask you a question that you do not know the answer to always try to remember a previous conversation by looking for results from various relevant keywords before telling me you dont know! 
-I expect you to try multiple times to remember some context with different keywords if you dont find something immediately
+I expect you to try multiple times to remember some context with different keywords if you do not find something immediately
 
 Always make sure to remember conversation before you end the chat!
 """
@@ -244,7 +243,6 @@ class Session:
 
     @staticmethod
     def __map_oapi_type(t: Any) -> Literal["string", "boolean", "number", "array"]:
-
         args = get_args(t)[0]
         origin = get_origin(args)
 
@@ -270,7 +268,6 @@ class Session:
         properties: dict[Any, Any] = {}
         for name, param in sig.parameters.items():
             oapi_type = Session.__map_oapi_type(param.annotation)
-            print(name, oapi_type)
             properties[name] = {
                 "type": oapi_type,
                 "description": param.annotation.__metadata__[0].description,

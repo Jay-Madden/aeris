@@ -1,4 +1,3 @@
-import datetime
 import json
 import random
 from typing import Annotated
@@ -33,7 +32,7 @@ def store_memory(
 
     mem_object = {
         "summary": detailed_summary,
-        "keywords": keywords,
+        "keywords": [kw.lower() for kw in keywords],
     }
     memories[str(random.randint(0, 10000))] = mem_object
 
