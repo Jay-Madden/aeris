@@ -2,16 +2,17 @@ import json
 import random
 from typing import Annotated, MutableMapping
 
+from llm.openai.models import ChatMessage
 from llm.session import Inject, Session, SessionGroup, Param
 
 from pydantic import BaseModel
 
 group = SessionGroup()
 
-
 class Memory(BaseModel):
     summary: str
     keywords: list[str]
+    conversation: list[ChatMessage]
 
 
 @group.function("Store a memory and keyword list describing the memory")
@@ -40,7 +41,7 @@ def store_memory(
 
     keywords = [kw.lower() for kw in keywords]
 
-    mem_object = Memory(summary=detailed_summary, keywords=keywords)
+    mem_object = Memory(summary=detailed_summary, keywords=keywords, conversation=session.messages)
     memories[str(random.randint(0, 10000))] = mem_object.model_dump()
 
     with open("model_output/memories.json", "w+") as f:

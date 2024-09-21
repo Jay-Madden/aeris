@@ -8,6 +8,11 @@ authors = ["Jay"]
 [tool.poetry.scripts]
 lint = 'black . && isort .'
 
+[tool.pyright]
+venvPath = "./"
+venv = ".venv"
+reportMissingImports = "error"
+
 [tool.mypy]
 plugins = [
   "pydantic.mypy"

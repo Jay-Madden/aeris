@@ -4,11 +4,22 @@ import os
 import traceback
 from typing import Any, Callable, TypeVar, Type, Literal, get_args, get_origin
 import unicodedata
+import logging
 
 from colorama import Style
 
 from llm.openai.client import Client
 from llm.openai.models import ChatFunction, ChatFunctionCall, ChatMessage
+
+logging.Logger.root = logging.root
+logging.Logger.manager = logging.Manager(logging.Logger.root)
+
+logging.basicConfig(
+    format=f"{Style.DIM}%(asctime)s %(levelname)s %(module)s %(message)s{Style.RESET_ALL}",
+    level=logging.INFO,
+)
+
+log = logging.getLogger(__name__)
 
 USER_NAME = os.getenv("USER_NAME") or "John Doe"
 LOCATION = os.getenv("LOCATION") or "New York"
@@ -219,11 +230,10 @@ class Session:
 
         function = self.functions[requested_call.name]
 
-        self._output_function_call_debug(
-            function.name, requested_call.arguments 
-        )
+        log.info(f"calling function: '{requested_call.name}' with args {json.dumps(requested_call.arguments)}")
 
         injected_params = self._resolve_injected_params(function.callable)
+        log.info(f"{injected_params}")
         
         try:
             func_result = function.callable(**requested_call.arguments, **injected_params)
@@ -242,17 +252,22 @@ class Session:
                 role="function", name=function.name, content=str(func_result)
             )
 
-        self._output_function_result_debug(function.name, func_result)
+        log.info(f"function: '{requested_call.name}' returned {json.dumps(func_result)}")
 
         return message
     
-    def _resolve_injected_params(self, func: ModelCallable[T]) -> dict[str, Any]:
+    def _resolve_injected_params(self, func: ModelCallable) -> dict:
         sig = inspect.signature(func)
 
         resolved_values = {}
 
         for name, param in sig.parameters.items():
-            action = get_args(param.annotation)[1]
+            args = get_args(param.annotation)
+            
+            if len(args) != 2:
+                continue
+            
+            action = args[1]
 
             if not isinstance(action, Inject):
                 continue
@@ -262,19 +277,6 @@ class Session:
 
         return resolved_values
         
-
-    @staticmethod
-    def _output_function_call_debug(name: str, function_args: Any) -> None:
-        print(
-            f"{Style.DIM}calling function: '{name}' with args {json.dumps(function_args)}{Style.RESET_ALL}"
-        )
-
-    @staticmethod
-    def _output_function_result_debug(name: str, result: Any) -> None:
-        print(
-            f"{Style.DIM}function: '{name}' returned {json.dumps(result)}{Style.RESET_ALL}"
-        )
-    
     @staticmethod
     def _map_oapi_type(args: Any) -> Literal["string", "boolean", "number", "array"]:
         origin = get_origin(args)
