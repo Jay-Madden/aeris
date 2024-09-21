@@ -2,7 +2,7 @@ import json
 import random
 from typing import Annotated, MutableMapping
 
-from llm.session import SessionGroup, Param
+from llm.session import Inject, Session, SessionGroup, Param
 
 from pydantic import BaseModel
 
@@ -26,6 +26,7 @@ def store_memory(
             description="List of single words without a space to be associated with this memory"
         ),
     ],
+    session: Annotated[Session, Inject(Session)]
 ) -> None:
     for kw in keywords:
         if " " in kw:

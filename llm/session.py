@@ -2,7 +2,8 @@ import inspect
 import json
 import os
 import traceback
-from typing import Any, Callable, TypeVar, Literal, get_args, get_origin
+from typing import Any, Callable, TypeVar, Type, Literal, get_args, get_origin
+import unicodedata
 
 from colorama import Style
 
@@ -44,6 +45,10 @@ GPT4O_MINI = "gpt-4o-mini"
 class Param:
     def __init__(self, description: str) -> None:
         self.description = description
+
+class Inject:
+    def __init__(self, requested_type: Type) -> None:
+        self.requested_type = requested_type
 
 
 T = TypeVar("T")
@@ -115,6 +120,10 @@ class Session:
         self.response_callback = response_callback
 
         self.current_model = default_model
+        
+        self.injection_mapping = {
+                Session: self
+            }
 
     @property
     def model_functions(self) -> list[ChatFunction]:
@@ -149,14 +158,14 @@ class Session:
         :return: the models string response
         """
 
-        res = self.__finish_prompt(ChatMessage(role="user", content=content))
+        res = self._finish_prompt(ChatMessage(role="user", content=content))
 
         if not res:
             return None
 
         return res.content
 
-    def __finish_prompt(self, message: ChatMessage) -> ChatMessage | None:
+    def _finish_prompt(self, message: ChatMessage) -> ChatMessage | None:
         # Add the latest message to the send stack
         self.message_to_send.append(message)
         final_result = None
@@ -166,9 +175,10 @@ class Session:
             # Add the message to the history, so it is accounted for
             self.messages.append(message)
 
+
             chat_result = self.client.send_chat(
                 self.current_model,
-                self.messages + [message],
+                self.messages,
                 functions=self.model_functions,
             )
 
@@ -181,14 +191,17 @@ class Session:
             # Loop over the choices in order handling both content and function calls
             for choice in chat_result.choices:
                 if choice.message.content:
+                    
+                    # The response sometimes includes non unicode characters like smart quotes, strip those out here
+                    normalized_response =  unicodedata.normalize('NFD', choice.message.content)
                     self.response_callback(
                         SessionResponseContext(
-                            content=choice.message.content, model=self.current_model
+                            content=normalized_response, model=self.current_model
                         )
                     )
 
                 if choice.message.function_call:
-                    results = self.__handle_function_calls(choice.message.function_call)
+                    results = self._handle_function_calls(choice.message.function_call)
                     self.message_to_send.append(results)
                     continue
 
@@ -197,37 +210,58 @@ class Session:
 
         return final_result.choices[0].message
 
-    def __handle_function_calls(self, requested_call: ChatFunctionCall) -> ChatMessage:
-        if requested_call.name in self.functions:
-            function = self.functions[requested_call.name]
-            # func_args = requested_call.arguments.values()
-
-            self._output_function_call_debug(
-                function.name, requested_call.arguments 
+    def _handle_function_calls(self, requested_call: ChatFunctionCall) -> ChatMessage:
+        if requested_call.name not in self.functions:
+            return ChatMessage(
+                role="system",
+                content=f"{requested_call.name} is not a valid function from the list you were given",
             )
 
-            try:
-                func_result = function.callable(**requested_call.arguments)
-            except SessionEndError:
-                # Reraise the SessionEndInterrupt to end the session if the AI requests it
-                raise
-            except Exception as e:
-                func_result = "".join(
-                    traceback.format_exception(type(e), e, e.__traceback__)
-                )
+        function = self.functions[requested_call.name]
 
-            self._output_function_result_debug(function.name, func_result)
+        self._output_function_call_debug(
+            function.name, requested_call.arguments 
+        )
 
+        injected_params = self._resolve_injected_params(function.callable)
+        
+        try:
+            func_result = function.callable(**requested_call.arguments, **injected_params)
+        except SessionEndError:
+            # Reraise the SessionEndInterrupt to end the session if the AI requests it
+            raise
+        except Exception as e:
+            func_result = "".join(
+                traceback.format_exception(type(e), e, e.__traceback__)
+            )
             message = ChatMessage(
-                role="function", name=function.name, content=str(func_result)
+                role="system", name=function.name, content=str(func_result)
             )
         else:
             message = ChatMessage(
-                role="system",
-                content=f"{requested_call.name} is not a valid function from the list I gave you",
+                role="function", name=function.name, content=str(func_result)
             )
 
+        self._output_function_result_debug(function.name, func_result)
+
         return message
+    
+    def _resolve_injected_params(self, func: ModelCallable[T]) -> dict[str, Any]:
+        sig = inspect.signature(func)
+
+        resolved_values = {}
+
+        for name, param in sig.parameters.items():
+            action = get_args(param.annotation)[1]
+
+            if not isinstance(action, Inject):
+                continue
+            
+            if action.requested_type in self.injection_mapping:
+                resolved_values[name] = self.injection_mapping[action.requested_type]
+
+        return resolved_values
+        
 
     @staticmethod
     def _output_function_call_debug(name: str, function_args: Any) -> None:
@@ -266,8 +300,16 @@ class Session:
 
         properties: dict[Any, Any] = {}
         for name, param in sig.parameters.items():
-            args = get_args(param.annotation)[0]
-            oapi_type = Session._map_oapi_type(args)
+            annotated_arg_type = get_args(param.annotation)[0]
+
+            action = get_args(param.annotation)[1]
+
+            # We do not want to include the injected arguments in the call to the model
+            # we will handle this ourselves at the callsite
+            if isinstance(action, Inject):
+                continue
+
+            oapi_type = Session._map_oapi_type(annotated_arg_type)
             
             properties[name] = {
                 "type": oapi_type,
@@ -276,9 +318,8 @@ class Session:
 
             if oapi_type == "array":
                 # Get the nested generic type of the array
-                generic_type = get_args(args)[0]
+                generic_type = get_args(annotated_arg_type)[0]
                 oapi_type = Session._map_oapi_type(generic_type)
-                print(oapi_type)
                 properties[name]["items"] = {"type": oapi_type}
 
         params = {
