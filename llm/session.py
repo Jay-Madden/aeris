@@ -200,14 +200,14 @@ class Session:
     def __handle_function_calls(self, requested_call: ChatFunctionCall) -> ChatMessage:
         if requested_call.name in self.functions:
             function = self.functions[requested_call.name]
-            func_args = requested_call.arguments.values()
+            # func_args = requested_call.arguments.values()
 
             self._output_function_call_debug(
-                function.name, [args for args in func_args]
+                function.name, requested_call.arguments 
             )
 
             try:
-                func_result = function.callable(*func_args)
+                func_result = function.callable(**requested_call.arguments)
             except SessionEndError:
                 # Reraise the SessionEndInterrupt to end the session if the AI requests it
                 raise
@@ -242,24 +242,39 @@ class Session:
         )
 
     @staticmethod
-    def __map_oapi_type(t: Any) -> Literal["string", "boolean", "number", "array"]:
-        args = get_args(t)[0]
+    def __map_oapi_type(t: Any) -> Literal["string", "boolean", "number", "array"] | None:
+        args = get_args(t)
         origin = get_origin(args)
+        
+        if len(args) != 2:
+           raise ValueError("Invalid function parameter type found") 
+        
+        param_action = args[1]
+        
+
+        # If its not a Param type its likely an injected type and we want to ignore it
+        # we will handle this at invocation time
+        if not isinstance(param_action, Param):
+            return None
+
+        annotated_type = args[0]
+
+        print(annotated_type)
 
         if origin is None:
-            if args == str:
+            if annotated_type == str:
                 return "string"
-            elif args == bool:
+            elif annotated_type == bool:
                 return "boolean"
-            elif args == int or t == float:
+            elif annotated_type == int or t == float:
                 return "number"
-            elif args == list:
+            elif annotated_type == list:
                 return "array"
         else:
             if origin == list:
                 return "array"
 
-        raise ValueError("Invalid function paramater type given")
+        raise ValueError("Invalid function parameter type given")
 
     @staticmethod
     def __create_function(func: ModelCallable[T], description: str) -> SessionFunction:
@@ -268,6 +283,10 @@ class Session:
         properties: dict[Any, Any] = {}
         for name, param in sig.parameters.items():
             oapi_type = Session.__map_oapi_type(param.annotation)
+            
+            if oapi_type == None:
+                continue
+            
             properties[name] = {
                 "type": oapi_type,
                 "description": param.annotation.__metadata__[0].description,

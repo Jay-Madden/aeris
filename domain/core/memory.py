@@ -4,7 +4,14 @@ from typing import Annotated
 
 from llm.session import SessionGroup, Param
 
+from pydantic import BaseModel
+
 group = SessionGroup()
+
+
+class Memory(BaseModel):
+    summary: str
+    keywords: list[str]
 
 
 @group.function("Store a memory and keyword list describing the memory")
@@ -30,10 +37,9 @@ def store_memory(
     except FileNotFoundError:
         memories = {}
 
-    mem_object = {
-        "summary": detailed_summary,
-        "keywords": [kw.lower() for kw in keywords],
-    }
+    keywords = [kw.lower() for kw in keywords]
+
+    mem_object = Memory(summary=detailed_summary, keywords=keywords)
     memories[str(random.randint(0, 10000))] = mem_object
 
     with open("model_output/memories.json", "w+") as f:
