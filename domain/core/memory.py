@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 group = SessionGroup()
 
+
 class Memory(BaseModel):
     summary: str
     keywords: list[str]
@@ -27,7 +28,7 @@ def store_memory(
             description="List of single words without a space to be associated with this memory"
         ),
     ],
-    session: Annotated[Session, Inject(Session)]
+    session: Annotated[Session, Inject(Session)],
 ) -> None:
     for kw in keywords:
         if " " in kw:
@@ -41,7 +42,9 @@ def store_memory(
 
     keywords = [kw.lower() for kw in keywords]
 
-    mem_object = Memory(summary=detailed_summary, keywords=keywords, conversation=session.messages)
+    mem_object = Memory(
+        summary=detailed_summary, keywords=keywords, conversation=session.messages
+    )
     memories[str(random.randint(0, 10000))] = mem_object.model_dump()
 
     with open("model_output/memories.json", "w+") as f:

@@ -1,4 +1,5 @@
 import requests
+import logging
 
 from llm.openai.models import (
     ChatFunction,
@@ -6,6 +7,8 @@ from llm.openai.models import (
     CreateChatRequest,
     CreateChatResponse,
 )
+
+log = logging.getLogger(__name__)
 
 
 class Client:
@@ -26,11 +29,15 @@ class Client:
         }
 
         json = chat_req.model_dump_json(exclude_unset=True)
+        log.debug(f"making api request with data: {json}")
+
         resp = requests.post(
             self.create_chat_url,
             headers=headers,
             data=json,
         )
+
+        log.debug(f"recieved headers: {resp.headers}")
 
         resp.raise_for_status()
 

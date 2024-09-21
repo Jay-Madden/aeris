@@ -16,6 +16,7 @@ def get_house_state() -> str:
 
     return json.dumps(room_state)
 
+
 @group.function("Turns the lights on or off in a given room number")
 def control_room_light(
     room_number: Annotated[int, Param(description="The room number to target")],

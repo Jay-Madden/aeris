@@ -57,6 +57,7 @@ class Param:
     def __init__(self, description: str) -> None:
         self.description = description
 
+
 class Inject:
     def __init__(self, requested_type: Type) -> None:
         self.requested_type = requested_type
@@ -131,10 +132,8 @@ class Session:
         self.response_callback = response_callback
 
         self.current_model = default_model
-        
-        self.injection_mapping = {
-                Session: self
-            }
+
+        self.injection_mapping = {Session: self}
 
     @property
     def model_functions(self) -> list[ChatFunction]:
@@ -186,7 +185,6 @@ class Session:
             # Add the message to the history, so it is accounted for
             self.messages.append(message)
 
-
             chat_result = self.client.send_chat(
                 self.current_model,
                 self.messages,
@@ -202,9 +200,10 @@ class Session:
             # Loop over the choices in order handling both content and function calls
             for choice in chat_result.choices:
                 if choice.message.content:
-                    
                     # The response sometimes includes non unicode characters like smart quotes, strip those out here
-                    normalized_response =  unicodedata.normalize('NFD', choice.message.content)
+                    normalized_response = unicodedata.normalize(
+                        "NFD", choice.message.content
+                    )
                     self.response_callback(
                         SessionResponseContext(
                             content=normalized_response, model=self.current_model
@@ -230,13 +229,16 @@ class Session:
 
         function = self.functions[requested_call.name]
 
-        log.info(f"calling function: '{requested_call.name}' with args {json.dumps(requested_call.arguments)}")
+        log.info(
+            f"calling function: '{requested_call.name}' with args {json.dumps(requested_call.arguments)}"
+        )
 
         injected_params = self._resolve_injected_params(function.callable)
-        log.info(f"{injected_params}")
-        
+
         try:
-            func_result = function.callable(**requested_call.arguments, **injected_params)
+            func_result = function.callable(
+                **requested_call.arguments, **injected_params
+            )
         except SessionEndError:
             # Reraise the SessionEndInterrupt to end the session if the AI requests it
             raise
@@ -252,10 +254,12 @@ class Session:
                 role="function", name=function.name, content=str(func_result)
             )
 
-        log.info(f"function: '{requested_call.name}' returned {json.dumps(func_result)}")
+        log.info(
+            f"function: '{requested_call.name}' returned {json.dumps(func_result)}"
+        )
 
         return message
-    
+
     def _resolve_injected_params(self, func: ModelCallable) -> dict:
         sig = inspect.signature(func)
 
@@ -263,20 +267,23 @@ class Session:
 
         for name, param in sig.parameters.items():
             args = get_args(param.annotation)
-            
+
             if len(args) != 2:
                 continue
-            
+
             action = args[1]
 
             if not isinstance(action, Inject):
                 continue
-            
+
             if action.requested_type in self.injection_mapping:
+                log.info(
+                    f"resolved requested type {action.requested_type} for param name {name} in function: {func.__name__}"
+                )
                 resolved_values[name] = self.injection_mapping[action.requested_type]
 
         return resolved_values
-        
+
     @staticmethod
     def _map_oapi_type(args: Any) -> Literal["string", "boolean", "number", "array"]:
         origin = get_origin(args)
@@ -312,7 +319,7 @@ class Session:
                 continue
 
             oapi_type = Session._map_oapi_type(annotated_arg_type)
-            
+
             properties[name] = {
                 "type": oapi_type,
                 "description": param.annotation.__metadata__[0].description,
