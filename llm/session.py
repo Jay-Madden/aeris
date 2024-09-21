@@ -15,7 +15,7 @@ logging.Logger.root = logging.root
 logging.Logger.manager = logging.Manager(logging.Logger.root)
 
 logging.basicConfig(
-    format=f"{Style.DIM}%(asctime)s %(levelname)s %(module)s %(message)s{Style.RESET_ALL}",
+    format=f"{Style.DIM}%(asctime)s %(levelname)s %(name)s %(message)s{Style.RESET_ALL}",
     level=logging.INFO,
 )
 
