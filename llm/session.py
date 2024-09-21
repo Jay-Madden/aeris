@@ -122,7 +122,7 @@ class Session:
 
     def add_group(self, group: SessionGroup) -> None:
         for model_func in group.functions:
-            chat_function = self.__create_function(
+            chat_function = self._create_function(
                 model_func.function, model_func.description
             )
             self.functions[chat_function.name] = chat_function
@@ -131,7 +131,7 @@ class Session:
         self, description: str
     ) -> Callable[[ModelCallable[T]], ModelCallable[T]]:
         def wrapper(func: ModelCallable[T]) -> ModelCallable[T]:
-            chat_function = self.__create_function(func, description)
+            chat_function = self._create_function(func, description)
             self.functions[chat_function.name] = chat_function
 
             def wrapper_internal(*args: Any, **kwargs: Any) -> T | str:
@@ -240,52 +240,34 @@ class Session:
         print(
             f"{Style.DIM}function: '{name}' returned {json.dumps(result)}{Style.RESET_ALL}"
         )
-
+    
     @staticmethod
-    def __map_oapi_type(t: Any) -> Literal["string", "boolean", "number", "array"] | None:
-        args = get_args(t)
+    def _map_oapi_type(args: Any) -> Literal["string", "boolean", "number", "array"]:
         origin = get_origin(args)
-        
-        if len(args) != 2:
-           raise ValueError("Invalid function parameter type found") 
-        
-        param_action = args[1]
-        
-
-        # If its not a Param type its likely an injected type and we want to ignore it
-        # we will handle this at invocation time
-        if not isinstance(param_action, Param):
-            return None
-
-        annotated_type = args[0]
-
-        print(annotated_type)
 
         if origin is None:
-            if annotated_type == str:
+            if args == str:
                 return "string"
-            elif annotated_type == bool:
+            elif args == bool:
                 return "boolean"
-            elif annotated_type == int or t == float:
+            elif args == int or args == float:
                 return "number"
-            elif annotated_type == list:
+            elif args == list:
                 return "array"
         else:
             if origin == list:
                 return "array"
 
-        raise ValueError("Invalid function parameter type given")
+        raise ValueError("Invalid function paramater type given")
 
     @staticmethod
-    def __create_function(func: ModelCallable[T], description: str) -> SessionFunction:
+    def _create_function(func: ModelCallable[T], description: str) -> SessionFunction:
         sig = inspect.signature(func)
 
         properties: dict[Any, Any] = {}
         for name, param in sig.parameters.items():
-            oapi_type = Session.__map_oapi_type(param.annotation)
-            
-            if oapi_type == None:
-                continue
+            args = get_args(param.annotation)[0]
+            oapi_type = Session._map_oapi_type(args)
             
             properties[name] = {
                 "type": oapi_type,
@@ -293,8 +275,10 @@ class Session:
             }
 
             if oapi_type == "array":
-                generic_type = get_args(param.annotation)[0]
-                oapi_type = Session.__map_oapi_type(generic_type)
+                # Get the nested generic type of the array
+                generic_type = get_args(args)[0]
+                oapi_type = Session._map_oapi_type(generic_type)
+                print(oapi_type)
                 properties[name]["items"] = {"type": oapi_type}
 
         params = {

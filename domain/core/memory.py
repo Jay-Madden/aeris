@@ -1,6 +1,6 @@
 import json
 import random
-from typing import Annotated
+from typing import Annotated, MutableMapping
 
 from llm.session import SessionGroup, Param
 
@@ -34,13 +34,13 @@ def store_memory(
     try:
         with open("model_output/memories.json", "r+") as f:
             memories = json.loads(f.read()) or {}
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError):
         memories = {}
 
     keywords = [kw.lower() for kw in keywords]
 
     mem_object = Memory(summary=detailed_summary, keywords=keywords)
-    memories[str(random.randint(0, 10000))] = mem_object
+    memories[str(random.randint(0, 10000))] = mem_object.model_dump()
 
     with open("model_output/memories.json", "w+") as f:
         f.write(json.dumps(memories, indent=2))
