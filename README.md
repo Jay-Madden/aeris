@@ -7,6 +7,7 @@ Allows for easily adding and removing model integrated functions.
 ### Example
 
 ```python
+from llm.session import Session, SessionGroup
 
 group = SessionGroup()
 
