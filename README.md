@@ -2,6 +2,21 @@
 
 ## General AGI assistant framework/playground
 
+Allows for easily adding and removing model integrated functions. 
+
+```python
+@group.function("Ends the current chat thread")
+def end_chat(
+    memory_saved: Annotated[
+        bool, Param(description="If this conversation has already been saved to memory")
+    ]
+) -> None:
+    if not memory_saved:
+        raise ValueError("All conversations must be remembered")
+
+    raise SessionEndError()
+```
+
 Maybe one day this will actually be useful :laughing:
 
 ### Configuration
