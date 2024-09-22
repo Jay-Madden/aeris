@@ -31,7 +31,7 @@ session.add_group(group)
 def main() -> None:
     try:
         while True:
-            text = input(f"{Fore.GREEN}User >> {Style.RESET_ALL}")
+            text = input("User >> ")
             session.make_request(text)
     except SessionEndError:
         pass
