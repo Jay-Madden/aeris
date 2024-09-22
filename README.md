@@ -2,7 +2,7 @@
 
 ## General AGI assistant framework/playground
 
-Allows for easily adding and removing model integrated functions. 
+Allows for easily adding and removing model integrated functions. And keeping track of a long stateful interaction with a given model. 
 
 ### Example
 
