@@ -4,7 +4,12 @@
 
 Allows for easily adding and removing model integrated functions. 
 
+### Example
+
 ```python
+
+group = SessionGroup()
+
 @group.function("Ends the current chat thread")
 def end_chat(
     memory_saved: Annotated[
@@ -15,6 +20,23 @@ def end_chat(
         raise ValueError("All conversations must be remembered")
 
     raise SessionEndError()
+
+session = Session(
+    token=token, default_model="gpt-4o-mini"
+)
+
+session.add_group(group)
+
+def main() -> None:
+    try:
+        while True:
+            text = input(f"{Fore.GREEN}User >> {Style.RESET_ALL}")
+            session.make_request(text)
+    except SessionEndError:
+        pass
+    except KeyboardInterrupt:
+        pass
+
 ```
 
 Maybe one day this will actually be useful :laughing:
