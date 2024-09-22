@@ -7,9 +7,19 @@ import unicodedata
 import logging
 
 from colorama import Style
+from pydantic import conset
 
 from llm.openai.client import Client
-from llm.openai.models import ChatFunction, ChatFunctionCall, ChatMessage
+from llm.openai.models import (
+    FUNCTION_ROLE,
+    SYSTEM_ROLE,
+    TOOL_ROLE,
+    USER_ROLE,
+    ChatTool,
+    ChatMessage,
+    ChatToolCall,
+    ChatToolFunction,
+)
 
 logging.Logger.root = logging.root
 logging.Logger.manager = logging.Manager(logging.Logger.root)
@@ -49,7 +59,7 @@ Always make sure to remember conversation before you end the chat!
 
 GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
 GPT3_5_FUNCTION_16K = "gpt-3.5-turbo-16k-0613"
-GPT4_FUNCTION = "gpt-4-1106-preview"
+GPT4_FUNCTION = "gpt-4o-2024-08-06"
 GPT4O_MINI = "gpt-4o-mini"
 
 
@@ -79,9 +89,7 @@ class SessionResponseContext:
 
 
 class SessionFunction:
-    def __init__(
-        self, callable: ModelCallable[T], model_function: ChatFunction
-    ) -> None:
+    def __init__(self, callable: ModelCallable[T], model_function: ChatTool) -> None:
         self.callable = callable
         self.model_function = model_function
 
@@ -125,9 +133,9 @@ class Session:
         self.client = Client(token=token)
         self.functions: dict[str, SessionFunction] = {}
         self.messages = [
-            ChatMessage(role="system", content=SYSTEM_INTRO_PROMPT),
+            ChatMessage(role=SYSTEM_ROLE, content=SYSTEM_INTRO_PROMPT),
         ]
-        self.message_to_send: list[ChatMessage] = []
+        self.messages_to_send: list[ChatMessage] = []
 
         self.response_callback = response_callback
 
@@ -136,7 +144,7 @@ class Session:
         self.injection_mapping = {Session: self}
 
     @property
-    def model_functions(self) -> list[ChatFunction]:
+    def model_functions(self) -> list[ChatTool]:
         return [func.model_function for func in self.functions.values()]
 
     def add_group(self, group: SessionGroup) -> None:
@@ -168,7 +176,7 @@ class Session:
         :return: the models string response
         """
 
-        res = self._finish_prompt(ChatMessage(role="user", content=content))
+        res = self._finish_prompt(ChatMessage(role=USER_ROLE, content=content))
 
         if not res:
             return None
@@ -177,18 +185,26 @@ class Session:
 
     def _finish_prompt(self, message: ChatMessage) -> ChatMessage | None:
         # Add the latest message to the send stack
-        self.message_to_send.append(message)
+        self.messages_to_send.append(message)
         final_result = None
 
         # Treat the list as a stack and pop the top
-        while self.message_to_send and (message := self.message_to_send.pop()):
+        while self.messages_to_send and (message := self.messages_to_send.pop()):
             # Add the message to the history, so it is accounted for
             self.messages.append(message)
+
+            # If we find a tool call we need to peek at the next entry to make sure we collect all the tool call messages before we respond
+            if (
+                message.role == TOOL_ROLE
+                and len(self.messages_to_send) > 0
+                and self.messages_to_send[-1].role == TOOL_ROLE
+            ):
+                continue
 
             chat_result = self.client.send_chat(
                 self.current_model,
                 self.messages,
-                functions=self.model_functions,
+                tools=self.model_functions,
             )
 
             # Extend the message stack with all the messages the model returned for you to handle
@@ -210,9 +226,9 @@ class Session:
                         )
                     )
 
-                if choice.message.function_call:
-                    results = self._handle_function_calls(choice.message.function_call)
-                    self.message_to_send.append(results)
+                if choice.message.tool_calls:
+                    results = self._handle_tool_calls(choice.message.tool_calls)
+                    self.messages_to_send.extend(results)
                     continue
 
         if not final_result:
@@ -220,45 +236,55 @@ class Session:
 
         return final_result.choices[0].message
 
-    def _handle_function_calls(self, requested_call: ChatFunctionCall) -> ChatMessage:
-        if requested_call.name not in self.functions:
-            return ChatMessage(
-                role="system",
-                content=f"{requested_call.name} is not a valid function from the list you were given",
+    def _handle_tool_calls(
+        self, requested_calls: list[ChatToolCall]
+    ) -> list[ChatMessage]:
+        tool_call_messages = []
+
+        for requested_call in requested_calls:
+            if requested_call.function.name not in self.functions:
+                tool_call_messages.append(
+                    ChatMessage(
+                        role=SYSTEM_ROLE,
+                        content=f"{requested_call.function.name} is not a valid function from the list you were given",
+                    )
+                )
+                continue
+
+            function = self.functions[requested_call.function.name]
+
+            log.info(
+                f"calling function: '{requested_call.function.name}' with args {json.dumps(requested_call.function.arguments)}"
             )
 
-        function = self.functions[requested_call.name]
+            injected_params = self._resolve_injected_params(function.callable)
 
-        log.info(
-            f"calling function: '{requested_call.name}' with args {json.dumps(requested_call.arguments)}"
-        )
+            try:
+                func_result = function.callable(
+                    **requested_call.function.arguments, **injected_params
+                )
+            except SessionEndError:
+                # Reraise the SessionEndInterrupt to end the session if the AI requests it
+                raise
+            except Exception as e:
+                func_result = "".join(
+                    traceback.format_exception(type(e), e, e.__traceback__)
+                )
 
-        injected_params = self._resolve_injected_params(function.callable)
-
-        try:
-            func_result = function.callable(
-                **requested_call.arguments, **injected_params
-            )
-        except SessionEndError:
-            # Reraise the SessionEndInterrupt to end the session if the AI requests it
-            raise
-        except Exception as e:
-            func_result = "".join(
-                traceback.format_exception(type(e), e, e.__traceback__)
-            )
             message = ChatMessage(
-                role="system", name=function.name, content=str(func_result)
-            )
-        else:
-            message = ChatMessage(
-                role="function", name=function.name, content=str(func_result)
+                role=TOOL_ROLE,
+                name=function.name,
+                content=str(func_result),
+                tool_call_id=requested_call.id,
             )
 
-        log.info(
-            f"function: '{requested_call.name}' returned {json.dumps(func_result)}"
-        )
+            log.info(
+                f"function: '{requested_call.function.name}' Call Id: '{requested_call.id}' returned {json.dumps(func_result)}"
+            )
 
-        return message
+            tool_call_messages.append(message)
+
+        return tool_call_messages
 
     def _resolve_injected_params(self, func: ModelCallable) -> dict:
         sig = inspect.signature(func)
@@ -318,6 +344,9 @@ class Session:
             if isinstance(action, Inject):
                 continue
 
+            if not isinstance(action, Param):
+                raise ValueError("Session function arguments must be <class 'Params>")
+
             oapi_type = Session._map_oapi_type(annotated_arg_type)
 
             properties[name] = {
@@ -334,11 +363,15 @@ class Session:
         params = {
             "type": "object",
             "properties": properties,
-            "required": [name for name, _ in sig.parameters.items()],
+            "required": list(properties.keys()),
+            "strict": True,
+            "additionalProperties": False,
         }
 
-        cf = ChatFunction(
-            name=func.__name__, description=description, parameters=params
+        chat_tool_function = ChatToolFunction(
+            name=func.__name__, description=description, parameters=params, strict=True
         )
 
-        return SessionFunction(callable=func, model_function=cf)
+        chat_tool = ChatTool(type=FUNCTION_ROLE, function=chat_tool_function)
+
+        return SessionFunction(callable=func, model_function=chat_tool)

@@ -2,7 +2,7 @@ import requests
 import logging
 
 from llm.openai.models import (
-    ChatFunction,
+    ChatTool,
     ChatMessage,
     CreateChatRequest,
     CreateChatResponse,
@@ -18,11 +18,9 @@ class Client:
         self.token = token
 
     def send_chat(
-        self, model: str, messages: list[ChatMessage], functions: list[ChatFunction]
+        self, model: str, messages: list[ChatMessage], tools: list[ChatTool]
     ) -> CreateChatResponse:
-        chat_req = CreateChatRequest(
-            model=model, messages=messages, functions=functions
-        )
+        chat_req = CreateChatRequest(model=model, messages=messages, tools=tools)
         headers = {
             "content-type": "application/json",
             "Authorization": "Bearer " + self.token,
@@ -39,7 +37,10 @@ class Client:
 
         log.debug(f"recieved headers: {resp.headers}")
 
+        json_res = resp.json()
+
+        log.debug(f"recieved data: {json_res}")
+
         resp.raise_for_status()
 
-        json_res = resp.json()
         return CreateChatResponse(**json_res)

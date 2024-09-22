@@ -42,7 +42,7 @@ if not (token := os.getenv("OPENAI_API_KEY")):
     raise Exception("'OPENAI_API_KEY not found")
 
 session = Session(
-    token=token, default_model=GPT4O_MINI, response_callback=print_response
+    token=token, default_model=GPT4_FUNCTION, response_callback=print_response
 )
 
 

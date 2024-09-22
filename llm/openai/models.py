@@ -1,14 +1,28 @@
 import datetime
 import json
-from typing import Any, Generic, Literal, ParamSpec
+from typing import Any, Literal
+from enum import Enum
 
 from pydantic import BaseModel, field_serializer, field_validator
 
-ChatUserType = (
-    Literal["user"] | Literal["system"] | Literal["assistant"] | Literal["function"]
-)
+ChatRoleUser = Literal["user"]
+USER_ROLE: ChatRoleUser = "user"
 
-P = ParamSpec("P")
+ChatRoleSystem = Literal["system"]
+SYSTEM_ROLE: ChatRoleSystem = "system"
+
+ChatRoleAssistant = Literal["assistant"]
+ASSISTANT_ROLE: ChatRoleAssistant = "assistant"
+
+ChatRoleFunction = Literal["function"]
+FUNCTION_ROLE: ChatRoleFunction = "function"
+
+ChatRoleTool = Literal["tool"]
+TOOL_ROLE: ChatRoleTool = "tool"
+
+ChatRoleType = (
+    ChatRoleUser | ChatRoleSystem | ChatRoleAssistant | ChatRoleFunction | ChatRoleTool
+)
 
 
 class ChatFunctionCall(BaseModel):
@@ -28,6 +42,33 @@ class ChatFunctionCall(BaseModel):
     # --------
 
 
+class ChatToolFunction(BaseModel):
+    name: str
+    description: str | None = None
+    parameters: dict[Any, Any]
+    strict: bool = False
+
+
+class ChatToolCall(BaseModel):
+    id: str
+    type: ChatRoleType
+    function: ChatFunctionCall
+
+
+class ChatTool(BaseModel):
+    type: ChatRoleType
+    function: ChatToolFunction
+
+
+class ChatToolChoiceFunction(BaseModel):
+    name: str
+
+
+class ChatToolChoice(BaseModel):
+    type: ChatRoleType
+    name: ChatToolChoiceFunction
+
+
 class ChatFunction(BaseModel):
     name: str
     description: str | None = None
@@ -35,17 +76,20 @@ class ChatFunction(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: ChatUserType
+    role: ChatRoleType
     content: str | None = None
     name: str | None = None
-    function_call: ChatFunctionCall | None = None
+    tool_call_id: str | None = None
+    tool_calls: list[ChatToolCall] | None = None
 
 
 class CreateChatRequest(BaseModel):
     model: str
     messages: list[ChatMessage]
-    functions: list[ChatFunction]
+    functions: list[ChatFunction] | None = None
     function_call: str | None = None
+    tools: list[ChatTool] | None = None
+    tool_choice: Literal["none", "auto", "required"] | ChatToolChoice | None = None
     temperature: float | None = None
     top_p: float | None = None
     n: int | None = None
