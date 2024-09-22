@@ -1,4 +1,4 @@
-# Aeris (Autonomous Engine for Real-time Intelligent Support)
+# Aeris 🧚 (Autonomous Engine for Real-time Intelligent Support)
 
 ## General AGI assistant framework/playground
 
