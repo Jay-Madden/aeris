@@ -1,15 +1,9 @@
-import datetime
 import os
-import random
-from typing import Annotated
 
 from domain.home import room
 from dotenv import load_dotenv
 
 load_dotenv()
-
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import domain.primitives.file as file
 import domain.primitives.time as time
@@ -42,7 +36,7 @@ if not (token := os.getenv("OPENAI_API_KEY")):
     raise Exception("'OPENAI_API_KEY not found")
 
 session = Session(
-    token=token, default_model=GPT4_FUNCTION, response_callback=print_response
+    token=token, default_model=GPT4O_MINI, response_callback=print_response
 )
 
 

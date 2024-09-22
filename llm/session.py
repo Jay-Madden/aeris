@@ -7,7 +7,6 @@ import unicodedata
 import logging
 
 from colorama import Style
-from pydantic import conset
 
 from llm.openai.client import Client
 from llm.openai.models import (
