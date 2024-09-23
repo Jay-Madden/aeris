@@ -15,14 +15,13 @@ from llm.session import (
     Param,
     SessionEndError,
     GPT3_5_FUNCTION,
-    GPT4_FUNCTION,
+    GPT4O_FUNCTION,
     GPT4O_MINI,
     SessionResponseContext,
     GPT3_5_FUNCTION_16K,
     SessionGroup,
 )
 
-import pytz
 from colorama import Fore, Style
 
 

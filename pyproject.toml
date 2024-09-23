@@ -44,12 +44,17 @@ icalendar = "^5.0.7"
 types-colorama = "^0.4.15.12"
 python-dotenv = "^1.0.0"
 pydantic-settings = "^2.5.2"
+psycopg = "^3.2.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
 mypy = "^1.5.1"
 isort = "^5.12.0"
 types-requests = "^2.31.0.2"
+
+
+[tool.poetry.group.binary.dependencies]
+psycopg = "^3.2.2"
 
 [build-system]
 requires = ["poetry-core"]

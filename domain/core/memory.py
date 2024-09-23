@@ -2,10 +2,12 @@ import json
 import random
 from typing import Annotated, MutableMapping
 
-from llm.openai.models import ChatMessage
-from llm.session import Inject, Session, SessionGroup, Param
+from llm.openai.models.chat import ChatMessage
+from llm.session import TEXT_EMBEDDING_3_LARGE, Inject, Session, SessionGroup, Param
+from llm.openai.client import Client
 
 from pydantic import BaseModel
+import psycopg
 
 group = SessionGroup()
 
@@ -29,54 +31,117 @@ def store_memory(
         ),
     ],
     session: Annotated[Session, Inject(Session)],
+    client: Annotated[Client, Inject(Client)],
 ) -> None:
     for kw in keywords:
         if " " in kw:
             raise ValueError("Keywords cannot contain a space")
 
-    try:
-        with open("model_output/memories.json", "r+") as f:
-            memories = json.loads(f.read()) or {}
-    except (FileNotFoundError, json.JSONDecodeError):
-        memories = {}
-
     keywords = [kw.lower() for kw in keywords]
 
-    mem_object = Memory(
-        summary=detailed_summary, keywords=keywords, conversation=session.messages
-    )
-    memories[str(random.randint(0, 10000))] = mem_object.model_dump()
+    embedding = client.create_embedding(TEXT_EMBEDDING_3_LARGE, detailed_summary)
 
-    with open("model_output/memories.json", "w+") as f:
-        f.write(json.dumps(memories, indent=2))
+    conversation = ""
+    for message in session.messages:
+        if not message.role == "user" and not message.role == "assistant":
+            continue
+
+        if message.content:
+            conversation += f"{message.role}: {message.content}\n"
+
+    save_memory_db(embedding.data[0].embedding, detailed_summary, conversation)
 
 
-@group.function("Recall a set of memories from a given list of keywords")
-def recall_memory_keyword(
-    keywords: Annotated[
-        list[str],
-        Param(description="List of keywords to use to search for a given memory"),
-    ]
+# @group.function("Recall a memory based on a query sentence")
+# def recall_memory(
+#     query: Annotated[
+#         str,
+#         Param(
+#             description="A short sentence describing what you are trying to remember"
+#         ),
+#     ],
+#     client: Annotated[Client, Inject(Client)],
+#     session: Annotated[Session, Inject(Session)],
+# ) -> list[str]:
+#     embedding = client.create_embedding(TEXT_EMBEDDING_3_LARGE, query)
+#
+#     with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
+#         with conn.cursor() as cur:
+#             cur.execute(
+#                 "SELECT complete FROM memory ORDER BY embedding <-> %s::vector LIMIT 3",
+#                 (embedding.data[0].embedding,),
+#             )
+#             conversations = cur.fetchall()
+#
+#     if not conversations:
+#         return ["nothing to remember"]
+
+
+@group.function("Recall a memory by its id")
+def recall_memory_by_id(
+    id: Annotated[
+        int,
+        Param(description="The id of the memory to remember"),
+    ],
+    client: Annotated[Client, Inject(Client)],
+    session: Annotated[Session, Inject(Session)],
 ) -> str:
-    for kw in keywords:
-        if " " in kw:
-            raise ValueError("Keywords cannot contain a space")
+    with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT complete FROM memory WHERE id = %s", (id,))
+            conversation = cur.fetchone()
 
-    try:
-        with open("model_output/memories.json", "r+") as f:
-            memories = json.loads(f.read()) or {}
-    except FileNotFoundError:
-        return ""
+    if not conversation:
+        return "nothing to remember"
 
-    memory_summaries: list[str] = []
+    return conversation[0]
 
-    for memory in memories.values():
-        for kw in keywords:
-            if kw.lower() in [kw_mem.lower() for kw_mem in memory["keywords"]]:
-                memory_summaries.append(memory["summary"])
 
-    return (
-        json.dumps(memory_summaries)
-        if memory_summaries
-        else "No results remembered please try again"
-    )
+@group.function(
+    "Recall a set of memories with an id based on a query sentence, to remember the full context call the memory_by_id function",
+)
+def recall_memory(
+    query: Annotated[
+        str,
+        Param(
+            description="A short sentence describing what you are trying to remember"
+        ),
+    ],
+    client: Annotated[Client, Inject(Client)],
+    session: Annotated[Session, Inject(Session)],
+) -> list[str]:
+    embedding = client.create_embedding(TEXT_EMBEDDING_3_LARGE, query)
+
+    with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id,summary FROM memory ORDER BY embedding <-> %s::vector LIMIT 3",
+                (embedding.data[0].embedding,),
+            )
+            conversations = cur.fetchall()
+
+    if not conversations:
+        return ["nothing to remember"]
+
+    return [
+        f"id: {conversation[0]} summary: {conversation[1]}"
+        for conversation in conversations
+    ]
+
+
+def save_memory_db(
+    embedding: list[float], summary: str, complete: str, parent: int | None = None
+):
+    with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
+        with conn.cursor() as cur:
+            if not parent:
+                cur.execute(
+                    "INSERT INTO memory (embedding, summary, complete) VALUES (%s, %s, %s)",
+                    (embedding, summary, complete),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO memory (embedding, summary, complete, parent_memory_id) VALUES (%s, %s, %s)",
+                    (embedding, summary, complete),
+                )
+        conn.commit()

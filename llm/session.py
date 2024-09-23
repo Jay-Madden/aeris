@@ -1,15 +1,17 @@
 import inspect
 import json
 import os
+import re
 import traceback
-from typing import Any, Callable, TypeVar, Type, Literal, get_args, get_origin
+from typing import Any, Callable, Required, TypeVar, Type, Literal, get_args, get_origin
 import unicodedata
 import logging
 
 from colorama import Style
 
+from llm.openai import client
 from llm.openai.client import Client
-from llm.openai.models import (
+from llm.openai.models.chat import (
     FUNCTION_ROLE,
     SYSTEM_ROLE,
     TOOL_ROLE,
@@ -58,8 +60,13 @@ Always make sure to remember conversation before you end the chat!
 
 GPT3_5_FUNCTION = "gpt-3.5-turbo-0613"
 GPT3_5_FUNCTION_16K = "gpt-3.5-turbo-16k-0613"
-GPT4_FUNCTION = "gpt-4o-2024-08-06"
+GPT4O_FUNCTION = "gpt-4o-2024-08-06"
 GPT4O_MINI = "gpt-4o-mini"
+
+TEXT_EMBEDDING_3_LARGE = "text-embedding-3-large"
+TEXT_EMBEDDING_3_LARGE_DIMENSIONS = 3072
+
+TEXT_EMBEDDING_3_SMALL = "text-embedding-3-small"
 
 
 class Param:
@@ -88,7 +95,11 @@ class SessionResponseContext:
 
 
 class SessionFunction:
-    def __init__(self, callable: ModelCallable[T], model_function: ChatTool) -> None:
+    def __init__(
+        self,
+        callable: ModelCallable[T],
+        model_function: ChatTool,
+    ) -> None:
         self.callable = callable
         self.model_function = model_function
 
@@ -98,7 +109,11 @@ class SessionFunction:
 
 
 class SessionGroupFunction:
-    def __init__(self, func: ModelCallable[Any], description: str):
+    def __init__(
+        self,
+        func: ModelCallable[Any],
+        description: str,
+    ):
         self.function: ModelCallable[Any] = func
         self.description = description
 
@@ -129,7 +144,8 @@ class Session:
         default_model: str,
         response_callback: Callable[[SessionResponseContext], None],
     ) -> None:
-        self.client = Client(token=token)
+        self._client = Client(token=token)
+
         self.functions: dict[str, SessionFunction] = {}
         self.messages = [
             ChatMessage(role=SYSTEM_ROLE, content=SYSTEM_INTRO_PROMPT),
@@ -140,7 +156,7 @@ class Session:
 
         self.current_model = default_model
 
-        self.injection_mapping = {Session: self}
+        self.injection_mapping = {Session: self, Client: self._client}
 
     @property
     def model_functions(self) -> list[ChatTool]:
@@ -151,14 +167,14 @@ class Session:
             chat_function = self._create_function(
                 model_func.function, model_func.description
             )
-            self.functions[chat_function.name] = chat_function
+            self.register_function(chat_function.name, chat_function)
 
     def function(
         self, description: str
     ) -> Callable[[ModelCallable[T]], ModelCallable[T]]:
         def wrapper(func: ModelCallable[T]) -> ModelCallable[T]:
             chat_function = self._create_function(func, description)
-            self.functions[chat_function.name] = chat_function
+            self.register_function(chat_function.name, chat_function)
 
             def wrapper_internal(*args: Any, **kwargs: Any) -> T | str:
                 return func(*args, **kwargs)
@@ -166,6 +182,12 @@ class Session:
             return wrapper_internal
 
         return wrapper
+
+    def register_function(self, name: str, function: SessionFunction):
+        self.functions[name] = function
+
+    def unregister_function(self, name: str):
+        del self.functions[name]
 
     def make_request(self, content: str) -> str | None:
         """
@@ -200,7 +222,7 @@ class Session:
             ):
                 continue
 
-            chat_result = self.client.send_chat(
+            chat_result = self._client.send_chat(
                 self.current_model,
                 self.messages,
                 tools=self.model_functions,
@@ -329,7 +351,10 @@ class Session:
         raise ValueError("Invalid function paramater type given")
 
     @staticmethod
-    def _create_function(func: ModelCallable[T], description: str) -> SessionFunction:
+    def _create_function(
+        func: ModelCallable[T],
+        description: str,
+    ) -> SessionFunction:
         sig = inspect.signature(func)
 
         properties: dict[Any, Any] = {}
