@@ -2,6 +2,8 @@
 
 ## General AGI assistant framework/playground
 
+A fastapi inspired lightweight llm agent framework.
+
 Allows for easily adding and removing model integrated functions. And keeping track of a long stateful interaction with a given model. 
 
 ### Example
