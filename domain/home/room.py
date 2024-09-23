@@ -1,4 +1,5 @@
 import json
+from os import stat
 from typing import Annotated
 
 from llm.session import SessionGroup, Param
@@ -8,13 +9,10 @@ group = SessionGroup()
 
 @group.function("Gets the current state of the house and its rooms")
 def get_house_state() -> str:
-    room_state = {
-        1: {"light_state": False},
-        2: {"light_state": False},
-        3: {"light_state": True},
-    }
+    with open("model_output/room_state.json", "r+") as f:
+        rooms = json.loads(f.read()) or {}
 
-    return json.dumps(room_state)
+    return json.dumps(rooms)
 
 
 @group.function("Turns the lights on or off in a given room number")
@@ -28,6 +26,12 @@ def control_room_light(
     if not isinstance(state, bool):
         raise ValueError("State must be a boolean")
 
-    print(f"Room {room_number} light turned off {state}")
+    with open("model_output/room_state.json", "r+") as f:
+        rooms = json.loads(f.read()) or {}
+
+    rooms[str(room_number)]["light_state"] = state
+
+    with open("model_output/room_state.json", "w+") as f:
+        f.write(json.dumps(rooms, indent=2))
 
     return True
