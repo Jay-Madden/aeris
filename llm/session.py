@@ -1,9 +1,10 @@
+import functools
 import inspect
 import json
+import copy
 import os
-import re
 import traceback
-from typing import Any, Callable, Required, TypeVar, Type, Literal, get_args, get_origin
+from typing import Any, Callable, Required, Self, TypeVar, Type, Literal, get_args, get_origin
 import unicodedata
 import logging
 
@@ -19,6 +20,8 @@ from llm.openai.models.chat import (
     ChatTool,
     ChatMessage,
     ChatToolCall,
+    ChatToolChoice,
+    ChatToolChoiceFunction,
     ChatToolFunction,
 )
 
@@ -128,6 +131,7 @@ class SessionGroup:
         def wrapper(func: ModelCallable[T]) -> ModelCallable[T]:
             self.functions.append(SessionGroupFunction(func, description))
 
+            @functools.wraps(func)
             def wrapper_internal(*args: Any, **kwargs: Any) -> T | str:
                 return func(*args, **kwargs)
 
@@ -142,7 +146,7 @@ class Session:
         *,
         token: str,
         default_model: str,
-        response_callback: Callable[[SessionResponseContext], None],
+        response_callback: Callable[[SessionResponseContext], None] | None,
     ) -> None:
         self._client = Client(token=token)
 
@@ -162,6 +166,9 @@ class Session:
     def model_functions(self) -> list[ChatTool]:
         return [func.model_function for func in self.functions.values()]
 
+    def clone(self) -> Self:
+        return copy.deepcopy(self)
+
     def add_group(self, group: SessionGroup) -> None:
         for model_func in group.functions:
             chat_function = self._create_function(
@@ -176,6 +183,7 @@ class Session:
             chat_function = self._create_function(func, description)
             self.register_function(chat_function.name, chat_function)
 
+            @functools.wraps(func)
             def wrapper_internal(*args: Any, **kwargs: Any) -> T | str:
                 return func(*args, **kwargs)
 
@@ -204,7 +212,7 @@ class Session:
 
         return res.content
 
-    def _finish_prompt(self, message: ChatMessage) -> ChatMessage | None:
+    def _finish_prompt(self, message: ChatMessage, *, required_call: ModelCallable[Any]| None = None) -> ChatMessage | None:
         # Add the latest message to the send stack
         self.messages_to_send.append(message)
         final_result = None
@@ -222,11 +230,23 @@ class Session:
             ):
                 continue
 
-            chat_result = self._client.send_chat(
-                self.current_model,
-                self.messages,
-                tools=self.model_functions,
-            )
+            if required_call:
+                chat_result = self._client.send_chat(
+                    self.current_model,
+                    self.messages,
+                    tools=self.model_functions,
+                    tool_choice=ChatToolChoice(type=FUNCTION_ROLE,function=ChatToolChoiceFunction(name=required_call.__name__))
+                )
+
+                # Reset the required call so we dont infinitely loop
+                required_call = None
+            else: 
+                chat_result = self._client.send_chat(
+                    self.current_model,
+                    self.messages,
+                    tools=self.model_functions,
+                )
+
 
             # Extend the message stack with all the messages the model returned for you to handle
             self.messages.extend([choice.message for choice in chat_result.choices])
@@ -241,11 +261,13 @@ class Session:
                     normalized_response = unicodedata.normalize(
                         "NFD", choice.message.content
                     )
-                    self.response_callback(
-                        SessionResponseContext(
-                            content=normalized_response, model=self.current_model
+
+                    if self.response_callback:
+                        self.response_callback(
+                            SessionResponseContext(
+                                content=normalized_response, model=self.current_model
+                            )
                         )
-                    )
 
                 if choice.message.tool_calls:
                     results = self._handle_tool_calls(choice.message.tool_calls)

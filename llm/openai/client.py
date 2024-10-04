@@ -4,6 +4,7 @@ import logging
 from llm.openai.models.chat import (
     ChatTool,
     ChatMessage,
+    ChatToolChoice,
     CreateChatRequest,
     CreateChatResponse,
 )
@@ -24,9 +25,9 @@ class Client:
         self.token = token
 
     def send_chat(
-        self, model: str, messages: list[ChatMessage], tools: list[ChatTool]
+            self, model: str, messages: list[ChatMessage], tools: list[ChatTool], tool_choice: ChatToolChoice | None = None
     ) -> CreateChatResponse:
-        chat_req = CreateChatRequest(model=model, messages=messages, tools=tools)
+        chat_req = CreateChatRequest(model=model, messages=messages, tools=tools, tool_choice=tool_choice)
         headers = {
             "content-type": "application/json",
             "Authorization": "Bearer " + self.token,
