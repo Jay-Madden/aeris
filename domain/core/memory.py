@@ -1,8 +1,7 @@
-import json
-import random
+import inspect
 from typing import Annotated, MutableMapping
 
-from llm.openai.models.chat import ChatMessage
+from llm.openai.models.chat import SYSTEM_ROLE, ChatMessage
 from llm.session import TEXT_EMBEDDING_3_LARGE, Inject, Session, SessionGroup, Param
 from llm.openai.client import Client
 
@@ -98,7 +97,7 @@ def recall_memory_by_id(
 
 
 @group.function(
-    "Recall a set of memories with an id based on a query sentence, to remember the full context call the memory_by_id function",
+    "Recall a memory based on a given context query sentence",
 )
 def recall_memory(
     query: Annotated[
@@ -109,7 +108,9 @@ def recall_memory(
     ],
     client: Annotated[Client, Inject(Client)],
     session: Annotated[Session, Inject(Session)],
-) -> list[str]:
+) -> str:
+
+
     embedding = client.create_embedding(TEXT_EMBEDDING_3_LARGE, query)
 
     with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
@@ -121,12 +122,23 @@ def recall_memory(
             conversations = cur.fetchall()
 
     if not conversations:
-        return ["nothing to remember"]
+        return "nothing to remember"
 
-    return [
-        f"id: {conversation[0]} summary: {conversation[1]}"
-        for conversation in conversations
-    ]
+    content = "Here are a list of memories. please choose a single one to recall the full memory of\n"
+    content += "\n".join(f"id: {conversation[0]} summary: {conversation[1]}" for conversation in conversations)
+    session = session.clone()
+    session.response_callback = None
+
+    # Pop the previous tool call message from the stack so we dont fail the request because we didnt send a response
+    session.messages.pop()
+
+    sub_message = ChatMessage(role=SYSTEM_ROLE, content=content)
+    final_result = session._finish_prompt(sub_message, required_call=inspect.unwrap(recall_memory_by_id))
+
+    if not final_result:
+        return "something broke tell me about it"
+
+    return final_result.content or "hi"
 
 
 def save_memory_db(
