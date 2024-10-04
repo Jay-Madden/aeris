@@ -51,39 +51,12 @@ def store_memory(
     save_memory_db(embedding.data[0].embedding, detailed_summary, conversation)
 
 
-# @group.function("Recall a memory based on a query sentence")
-# def recall_memory(
-#     query: Annotated[
-#         str,
-#         Param(
-#             description="A short sentence describing what you are trying to remember"
-#         ),
-#     ],
-#     client: Annotated[Client, Inject(Client)],
-#     session: Annotated[Session, Inject(Session)],
-# ) -> list[str]:
-#     embedding = client.create_embedding(TEXT_EMBEDDING_3_LARGE, query)
-#
-#     with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(
-#                 "SELECT complete FROM memory ORDER BY embedding <-> %s::vector LIMIT 3",
-#                 (embedding.data[0].embedding,),
-#             )
-#             conversations = cur.fetchall()
-#
-#     if not conversations:
-#         return ["nothing to remember"]
-
-
 @group.function("Recall a memory by its id")
 def recall_memory_by_id(
     id: Annotated[
         int,
         Param(description="The id of the memory to remember"),
     ],
-    client: Annotated[Client, Inject(Client)],
-    session: Annotated[Session, Inject(Session)],
 ) -> str:
     with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
         with conn.cursor() as cur:
@@ -110,6 +83,8 @@ def recall_memory(
     session: Annotated[Session, Inject(Session)],
 ) -> str:
 
+    session = session.clone()
+    session.response_callback = None
 
     embedding = client.create_embedding(TEXT_EMBEDDING_3_LARGE, query)
 
@@ -126,10 +101,8 @@ def recall_memory(
 
     content = "Here are a list of memories. please choose a single one to recall the full memory of\n"
     content += "\n".join(f"id: {conversation[0]} summary: {conversation[1]}" for conversation in conversations)
-    session = session.clone()
-    session.response_callback = None
 
-    # Pop the previous tool call message from the stack so we dont fail the request because we didnt send a response
+    # Pop the previous tool call message from the stack so we dont fail the request because we did not send a tool response
     session.messages.pop()
 
     sub_message = ChatMessage(role=SYSTEM_ROLE, content=content)
