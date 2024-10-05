@@ -1,6 +1,6 @@
 import inspect
 import logging
-from typing import Annotated, MutableMapping, final
+from typing import Annotated
 
 from llm.openai.models.chat import SYSTEM_ROLE, ChatMessage
 from llm.session import TEXT_EMBEDDING_3_LARGE, Inject, Session, SessionGroup, Param
