@@ -1,5 +1,6 @@
 import inspect
-from typing import Annotated, MutableMapping
+import logging
+from typing import Annotated, MutableMapping, final
 
 from llm.openai.models.chat import SYSTEM_ROLE, ChatMessage
 from llm.session import TEXT_EMBEDDING_3_LARGE, Inject, Session, SessionGroup, Param
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 import psycopg
 
 group = SessionGroup()
+
+log = logging.getLogger(__name__)
 
 
 class Memory(BaseModel):
@@ -108,15 +111,17 @@ def recall_memory(
     sub_message = ChatMessage(role=SYSTEM_ROLE, content=content)
     final_result = session._finish_prompt(sub_message, required_call=inspect.unwrap(recall_memory_by_id))
 
-    if not final_result:
+    if not final_result or not final_result.content:
         return "something broke tell me about it"
 
-    return final_result.content or "hi"
+    return final_result.content
 
 
 def save_memory_db(
     embedding: list[float], summary: str, complete: str, parent: int | None = None
 ):
+    log.info(f"Saving memory with summary: '{summary}")
+
     with psycopg.connect("dbname=aeris_memory user=jaymadden") as conn:
         with conn.cursor() as cur:
             if not parent:
