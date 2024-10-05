@@ -13,16 +13,15 @@ from llm.session import Session, SessionGroup
 
 group = SessionGroup()
 
-@group.function("Ends the current chat thread")
-def end_chat(
-    memory_saved: Annotated[
-        bool, Param(description="If this conversation has already been saved to memory")
+@group.function("Reads a file on the computer at a given path")
+def read_file(
+    file_path: Annotated[
+        str, Param(description="The relative path to the file to read")
     ]
-) -> None:
-    if not memory_saved:
-        raise ValueError("All conversations must be remembered")
+) -> str:
+    with open(file_path) as f:
+        return f.read()
 
-    raise SessionEndError()
 
 session = Session(
     token=token, default_model="gpt-4o-mini"
